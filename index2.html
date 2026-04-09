@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Scene</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
+</head>
+<body>
+<a-scene
+  fog="type: linear; color: #c8d8e8; near: 50; far: 120"
+  renderer="colorManagement: true"
+  shadow="type: pcfsoft"
+  background="color: #6ba3d0">
+
+  <!-- ═══════════════════════ ASSETS ═══════════════════════ -->
+  <a-assets timeout="15000">
+    <img id="pub-diff"    src="pub_tile_diffuse.jpg">
+    <img id="pub-norm"    src="pub_tile_normal.jpg">
+    <img id="pub-rough"   src="pub_tile_roughness.jpg">
+    <img id="stone-diff"  src="sandstone_diffuse.jpg">
+    <img id="stone-ao"    src="sandstone_ao.jpg">
+    <img id="stone-rough" src="Sandstone_Rough.jpg">
+    <img id="road-diff"   src="street_diffuse.jpg">
+    <img id="road-norm"   src="street_normal.jpg">
+    <img id="road-rough"  src="street_roughness.jpg">
+    <img id="brick-diff"  src="brown_brick_diffuse.jpg">
+    <img id="brick-norm"  src="brown_brick_normal.jpg">
+    <img id="brick-rough" src="brown_brick_roughness.jpg">
+    <img id="brick-ao"    src="brown_brick_ao.jpg">
+    <audio id="blitz-snd" src="blitz.mp3" preload="auto"></audio>
+    <audio id="vera-snd"  src="vera.mp3"  preload="auto"></audio>
+    <a-asset-item id="pubdoors-glb"   src="Pubdoors.glb"></a-asset-item>
+    <a-asset-item id="streetlamp-glb" src="Streetlamp.glb"></a-asset-item>
+    <a-asset-item id="postbox-glb"    src="Postbox.glb"></a-asset-item>
+    <a-asset-item id="barrel-glb"     src="woodenbarrel.glb"></a-asset-item>
+    <a-asset-item id="sandbag-glb"    src="Sandbagwall.glb"></a-asset-item>
+    <a-asset-item id="rubble-glb"     src="rubble.glb"></a-asset-item>
+  </a-assets>
+
+  <!-- ═══════════════════════ LIGHTING ═══════════════════════ -->
+  <a-light type="ambient"     color="#d0d8e0" intensity="1.4"></a-light>
+  <a-light type="directional" color="#fff8e8" intensity="1.6"
+           position="-8 20 5" cast-shadow="true">
+  </a-light>
+
+  <!-- ═══════════════════════ GROUND ═══════════════════════ -->
+  <a-plane position="0 0 0" rotation="-90 0 0" width="100" height="100"
+    material="src: #road-diff; normalMap: #road-norm; roughnessMap: #road-rough;
+              repeat: 50 50; roughness: 0.85; metalness: 0">
+  </a-plane>
+
+  <!-- ═══════════════════════ SKY ═══════════════════════ -->
+  <a-sky color="#b0c8d8"></a-sky>
+
+  <!-- ═══════════════════════ RUBBLE TEST ═══════════════════════ -->
+  <!-- Placed 5m ahead of player — adjust scale once you see it -->
+  <a-entity gltf-model="#rubble-glb" position="0 0 -5" rotation="0 0 0" scale="1 1 1"></a-entity>
+
+  <!-- ═══════════════════════ PLAYER ═══════════════════════ -->
+  <a-entity id="rig"
+            position="0 0 5"
+            movement-controls="fly: false; speed: 0.8; camera: #cam">
+    <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
+    <a-entity oculus-touch-controls="hand: left"></a-entity>
+    <a-entity oculus-touch-controls="hand: right"></a-entity>
+  </a-entity>
+
+</a-scene>
+</body>
+</html>

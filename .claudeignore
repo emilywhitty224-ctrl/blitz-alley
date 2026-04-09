@@ -1,0 +1,12 @@
+*.glb
+*.jpg
+*.png
+*.mp3
+*.zip
+*.glb
+*.jpg
+*.png
+*.mp3
+*.zip
+node_modules/
+.git/
