@@ -135,6 +135,83 @@
 
   <a-sky color="#050402"></a-sky>
 
+  <!-- ═══════════════════════════════════════════════════════════════
+       BARRAGE BALLOONS
+       Real balloons: ~19 m long, ~8 m diameter, silver fabric.
+       Cables were ~7 mm steel wire — shown as thin 0.05 m boxes.
+       Positioned at realistic altitudes (45–65 m) above the alley.
+       Each balloon: elongated ellipsoid (sphere scaled on parent entity)
+                     + two stabilising tail fins at the rear.
+  ════════════════════════════════════════════════════════════════ -->
+
+  <!-- Balloon 1 — high above west side, tilted slightly nose-up in wind -->
+  <a-entity position="-12 55 -20" rotation="0 20 -8">
+    <!-- Main gas bag: 19 m long, 8 m tall, 7 m wide -->
+    <a-entity scale="1 1 1">
+      <a-sphere radius="4.5"
+                material="color: #9eb0a4; roughness: 0.3; metalness: 0.45;
+                          emissive: #2a3830; emissiveIntensity: 0.1"
+                geometry="primitive: sphere; segmentsWidth: 12; segmentsHeight: 8"
+                scale="2.1 1 0.85"></a-sphere>
+    </a-entity>
+    <!-- Tail fin — vertical -->
+    <a-box position="-7.5 1.5 0" width="3.5" height="2.2" depth="0.18" rotation="0 0 18"
+           material="color: #8aa09a; roughness: 0.4; metalness: 0.35"></a-box>
+    <!-- Tail fin — horizontal left -->
+    <a-box position="-7.5 0 -1.8" width="3.5" height="0.18" depth="2.2" rotation="0 -10 8"
+           material="color: #8aa09a; roughness: 0.4; metalness: 0.35"></a-box>
+    <!-- Tail fin — horizontal right -->
+    <a-box position="-7.5 0  1.8" width="3.5" height="0.18" depth="2.2" rotation="0  10 8"
+           material="color: #8aa09a; roughness: 0.4; metalness: 0.35"></a-box>
+    <!-- Nose attachment point (small dark fitting) -->
+    <a-box position="9.5 0 0" width="0.4" height="0.4" depth="0.4" color="#2a2820"></a-box>
+  </a-entity>
+  <!-- Cable 1 — runs from nose fitting down toward ground, slight angle from wind -->
+  <a-box position="-9.5 27 -18" width="0.05" height="56" depth="0.05"
+         color="#3a3830" rotation="0 0 12"></a-box>
+
+  <!-- Balloon 2 — lower, more central, directly overhead mid-alley -->
+  <a-entity position="3 42 -25" rotation="0 -15 5">
+    <a-entity scale="1 1 1">
+      <a-sphere radius="4"
+                material="color: #a8b8ac; roughness: 0.28; metalness: 0.5;
+                          emissive: #303c34; emissiveIntensity: 0.08"
+                geometry="primitive: sphere; segmentsWidth: 12; segmentsHeight: 8"
+                scale="2.2 1 0.9"></a-sphere>
+    </a-entity>
+    <a-box position="-7 1.2 0"  width="3.2" height="2.0" depth="0.16" rotation="0 0 15"
+           material="color: #90a898; roughness: 0.4; metalness: 0.35"></a-box>
+    <a-box position="-7 0 -1.6" width="3.2" height="0.16" depth="2.0" rotation="0 -8 6"
+           material="color: #90a898; roughness: 0.4; metalness: 0.35"></a-box>
+    <a-box position="-7 0  1.6" width="3.2" height="0.16" depth="2.0" rotation="0  8 6"
+           material="color: #90a898; roughness: 0.4; metalness: 0.35"></a-box>
+    <a-box position="8.8 0 0" width="0.4" height="0.4" depth="0.4" color="#2a2820"></a-box>
+  </a-entity>
+  <!-- Cable 2 -->
+  <a-box position="5 21 -24" width="0.05" height="42" depth="0.05"
+         color="#3a3830" rotation="0 0 -8"></a-box>
+
+  <!-- Balloon 3 — high and far, east side, visible above damaged roofline -->
+  <a-entity position="18 65 -35" rotation="0 35 3">
+    <a-entity scale="1 1 1">
+      <a-sphere radius="4.2"
+                material="color: #909e98; roughness: 0.32; metalness: 0.42;
+                          emissive: #282e28; emissiveIntensity: 0.07"
+                geometry="primitive: sphere; segmentsWidth: 12; segmentsHeight: 8"
+                scale="2.0 1 0.88"></a-sphere>
+    </a-entity>
+    <a-box position="-6.5 1.0 0"  width="3.0" height="1.8" depth="0.15" rotation="0 0 12"
+           material="color: #808e88; roughness: 0.4; metalness: 0.35"></a-box>
+    <a-box position="-6.5 0 -1.5" width="3.0" height="0.15" depth="1.8" rotation="0 -12 5"
+           material="color: #808e88; roughness: 0.4; metalness: 0.35"></a-box>
+    <a-box position="-6.5 0  1.5" width="3.0" height="0.15" depth="1.8" rotation="0  12 5"
+           material="color: #808e88; roughness: 0.4; metalness: 0.35"></a-box>
+    <a-box position="8.4 0 0" width="0.35" height="0.35" depth="0.35" color="#2a2820"></a-box>
+  </a-entity>
+  <!-- Cable 3 — long run down to east side of street -->
+  <a-box position="21 32 -33" width="0.05" height="66" depth="0.05"
+         color="#383630" rotation="0 0 -15"></a-box>
+
   <!-- ═══ GROUND ═══
        Full 30 m cobbled floor — no gaps.
        Street texture, high repeat for fine cobble detail.
