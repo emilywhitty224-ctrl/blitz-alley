@@ -68,6 +68,21 @@
       }
     });
   </script>
+  <script>
+    // Unlock AudioContext on first interaction — required by all modern browsers & Quest
+    function unlockAudio() {
+      var ctx = AFRAME.THREE.AudioContext.getContext();
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    }
+    ['click','touchstart','touchend'].forEach(function(e) {
+      document.addEventListener(e, unlockAudio);
+    });
+    // Also unlock when entering VR — the headset button counts as an interaction
+    window.addEventListener('load', function() {
+      var scene = document.querySelector('a-scene');
+      if (scene) scene.addEventListener('enter-vr', unlockAudio);
+    });
+  </script>
 </head>
 <body>
 <a-scene
@@ -226,9 +241,7 @@
               repeat: 16 20; roughness: 0.94; metalness: 0">
   </a-plane>
   <!-- Pub step / forecourt -->
-  <a-box position="0 0.07 -29.55" width="2.0" height="0.14" depth="0.6"
-         material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 2 0.6; roughness: 0.88; metalness: 0">
-  </a-box>
+  <a-box position="0 0.07 -29.55" width="2.0" height="0.14" depth="0.6" color="#787068"></a-box>
 
   <!-- ═══════════════════════════════════════════════════════════════
        WEST WALL — intact Victorian terrace, 12 m tall
@@ -275,12 +288,8 @@
   <!-- ═══ WEST STRING COURSES — stone bands between floors ═══
        Floor 1→2 at Y=3.6, floor 2→3 at Y=6.5 (slightly proud of brick face)
   -->
-  <a-box position="-2.01 3.6 -15" width="0.08" height="0.18" depth="30.5"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 30 0.2; roughness: 0.88; metalness: 0">
-  </a-box>
-  <a-box position="-2.01 6.5 -15" width="0.08" height="0.14" depth="30.5"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 30 0.15; roughness: 0.88; metalness: 0">
-  </a-box>
+  <a-box position="-2.01 3.6 -15" width="0.07" height="0.16" depth="30.5" color="#6a5840"></a-box>
+  <a-box position="-2.01 6.5 -15" width="0.07" height="0.12" depth="30.5" color="#6a5840"></a-box>
 
   <!-- West parapet -->
   <a-box position="-2.175 12.3 -15" width="0.65" height="0.6" depth="30.5" color="#3a2818"></a-box>
@@ -306,15 +315,15 @@
   <a-box position="-2.03 1.9 -4"   width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
   <a-box position="-2.01 1.9 -4"   width="0.05" height="1.7" depth="0.88"
          material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-2.00 1.9 -4"   rotation="45 0 0"  width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
-  <a-box position="-2.00 1.9 -4"   rotation="-45 0 0" width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
+  <a-box position="-2.00 1.9 -4"   rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
+  <a-box position="-2.00 1.9 -4"   rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
 
   <!-- Ground floor Z=-9 -->
   <a-box position="-2.03 1.9 -9"   width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
   <a-box position="-2.01 1.9 -9"   width="0.05" height="1.7" depth="0.88"
          material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-2.00 1.9 -9"   rotation="45 0 0"  width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
-  <a-box position="-2.00 1.9 -9"   rotation="-45 0 0" width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
+  <a-box position="-2.00 1.9 -9"   rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
+  <a-box position="-2.00 1.9 -9"   rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
 
   <!-- First floor Z=-7 — AMBER LIT (curtain slipping) -->
   <a-box position="-2.03 4.9 -7"   width="0.09" height="1.7" depth="1.05" color="#1a1008"></a-box>
@@ -328,22 +337,22 @@
   <a-box position="-1.78 1.9 -15"  width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
   <a-box position="-1.76 1.9 -15"  width="0.05" height="1.7" depth="0.88"
          material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-1.75 1.9 -15"  rotation="45 0 0"  width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
-  <a-box position="-1.75 1.9 -15"  rotation="-45 0 0" width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
+  <a-box position="-1.75 1.9 -15"  rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
+  <a-box position="-1.75 1.9 -15"  rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
 
   <!-- Seg 2 first floor Z=-17 -->
   <a-box position="-1.78 4.9 -17"  width="0.09" height="1.7" depth="1.05" color="#1a1008"></a-box>
   <a-box position="-1.76 4.9 -17"  width="0.05" height="1.5" depth="0.88"
          material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-1.75 4.9 -17"  rotation="45 0 0"  width="0.01" height="1.5" depth="0.06" color="#c4a030"></a-box>
-  <a-box position="-1.75 4.9 -17"  rotation="-45 0 0" width="0.01" height="1.5" depth="0.06" color="#c4a030"></a-box>
+  <a-box position="-1.75 4.9 -17"  rotation="30 0 0"  width="0.02" height="1.74" depth="0.03" color="#c4a030"></a-box>
+  <a-box position="-1.75 4.9 -17"  rotation="-30 0 0" width="0.02" height="1.74" depth="0.03" color="#c4a030"></a-box>
 
   <!-- Seg 3 ground floor Z=-25 -->
   <a-box position="-2.03 1.9 -25"  width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
   <a-box position="-2.01 1.9 -25"  width="0.05" height="1.7" depth="0.88"
          material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-2.00 1.9 -25"  rotation="45 0 0"  width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
-  <a-box position="-2.00 1.9 -25"  rotation="-45 0 0" width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
+  <a-box position="-2.00 1.9 -25"  rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
+  <a-box position="-2.00 1.9 -25"  rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
 
   <!-- ═══ WINDOW SILLS — west wall ═══
        Windows: ground floor Y=1.9 h=1.9 → bottom Y=0.95 → sill Y=0.88
@@ -536,11 +545,7 @@
   <!-- Rubble on damaged east side -->
   <!-- rubble GLB removed — scale TBD -->
 
-  <!-- ARP wall signs -->
-  <a-text value="AIR RAID SHELTER ▶" position="-1.94 2.35 -22" rotation="0 90 0"
-          color="#d4b830" width="2.4" align="left"></a-text>
-  <a-text value="KEEP LIGHTS OFF"    position="-1.94 1.95 -22" rotation="0 90 0"
-          color="#c03030" width="1.9" align="left"></a-text>
+  <!-- ARP signs removed -->
 
   <!-- ═══ REFERENCE PERSON BOX ═══
        Exactly 1.8 m tall, 0.45 m wide — human scale reference.
@@ -743,7 +748,7 @@
   </a-box>
 
   <!-- Rubble blockage across side alley -->
-  <a-box position="8 0.8 -25" width="0.35" height="1.6" depth="10" color="#181410"></a-box>
+  <a-box position="8 0.8 -25" width="0.35" height="1.6" depth="10" color="#3a2c1e"></a-box>
   <a-box position="7.7 0.55 -25" width="3" height="1.1" depth="9"
     material="src: #brick-diff; normalMap: #brick-norm; roughnessMap: #brick-rough;
               repeat: 7 3; roughness: 0.95; metalness: 0; color: #2e1e0a">
