@@ -215,6 +215,62 @@
   <a-box position="-2.00 1.9 -25"  rotation="45 0 0"  width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
   <a-box position="-2.00 1.9 -25"  rotation="-45 0 0" width="0.01" height="1.8" depth="0.06" color="#c4a030"></a-box>
 
+  <!-- ═══ WINDOW SILLS — west wall ═══
+       Windows: ground floor Y=1.9 h=1.9 → bottom Y=0.95 → sill Y=0.88
+                first floor  Y=4.9 h=1.7 → bottom Y=4.05 → sill Y=3.98
+  -->
+  <a-box position="-2.02 0.88 -4"  width="0.15" height="0.08" depth="1.2"
+    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
+  </a-box>
+  <a-box position="-2.02 0.88 -9"  width="0.15" height="0.08" depth="1.2"
+    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
+  </a-box>
+  <a-box position="-2.02 3.98 -7"  width="0.15" height="0.08" depth="1.12"
+    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.1 0.1; roughness: 0.88; metalness: 0">
+  </a-box>
+  <!-- Seg 2 sills -->
+  <a-box position="-1.79 0.88 -15" width="0.15" height="0.08" depth="1.2"
+    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
+  </a-box>
+  <a-box position="-1.79 3.98 -17" width="0.15" height="0.08" depth="1.12"
+    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.1 0.1; roughness: 0.88; metalness: 0">
+  </a-box>
+  <!-- Seg 3 sill -->
+  <a-box position="-2.02 0.88 -25" width="0.15" height="0.08" depth="1.2"
+    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
+  </a-box>
+
+  <!-- ═══ STONE BASE PLINTH — west wall ═══
+       0.3 m tall stone plinth at ground level, slightly proud of brick face.
+       Keeps damp off brickwork — very typical Victorian.
+  -->
+  <a-box position="-2.01 0.15 -6"   width="0.05" height="0.3" depth="12"
+    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
+              repeat: 12 0.3; roughness: 0.9; metalness: 0">
+  </a-box>
+  <a-box position="-1.76 0.15 -17"  width="0.05" height="0.3" depth="10"
+    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
+              repeat: 10 0.3; roughness: 0.9; metalness: 0">
+  </a-box>
+  <a-box position="-2.01 0.15 -26"  width="0.05" height="0.3" depth="8"
+    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
+              repeat: 8 0.3; roughness: 0.9; metalness: 0">
+  </a-box>
+
+  <!-- ═══ DRAINPIPES — west wall ═══
+       Cast iron, Victorian. Run from gutter (12 m) to ground.
+       Circular-ish (box stand-in), 0.08 m sq, dark iron.
+  -->
+  <a-box position="-1.995 6 -3"  width="0.08" height="12" depth="0.08" color="#252018"></a-box>
+  <a-box position="-1.995 6 -11" width="0.08" height="12" depth="0.08" color="#252018"></a-box>
+  <a-box position="-1.745 6 -19" width="0.08" height="12" depth="0.08" color="#252018"></a-box>
+  <a-box position="-1.995 6 -27" width="0.08" height="12" depth="0.08" color="#252018"></a-box>
+  <!-- Pipe shoes (small bracket boxes at ground) -->
+  <a-box position="-1.98 0.2 -3"  width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
+  <a-box position="-1.98 0.2 -11" width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
+  <a-box position="-1.73 0.2 -19" width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
+  <a-box position="-1.98 0.2 -27" width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
+
   <!-- ═══ WEST DOOR (ground floor recess, Z=-12) ═══ -->
   <a-box position="-2.03 1.1 -12.5" width="0.09" height="2.3" depth="1.05" color="#1a1008"></a-box>
   <a-box position="-2.00 1.05 -12.5" width="0.06" height="2.0" depth="0.9" color="#241a0c"></a-box>
@@ -390,6 +446,20 @@
 
   <!-- ── Pub doors ── -->
   <a-entity gltf-model="#pubdoors-glb" position="0 0 -29.85" rotation="0 180 0" scale="0.7 0.7 0.7"></a-entity>
+
+  <!-- ── HANGING PUB SIGN — bracket on west side of pub facade ──
+       Iron bracket projects from face. Sign hangs, readable from alley.
+  -->
+  <a-box position="-1.8 4.9 -29.55" width="0.07" height="0.07" depth="0.8" color="#252018"></a-box>
+  <a-box position="-1.8 4.55 -29.2" width="0.07" height="0.72" depth="0.07" color="#252018"></a-box>
+  <a-box position="-1.74 3.95 -29.2" width="0.07" height="0.85" depth="0.55" color="#0c1208"></a-box>
+  <a-box position="-1.71 3.95 -29.2" width="0.04" height="0.72" depth="0.45" color="#4a3808"></a-box>
+  <a-text value="ROYAL&#10;OAK" position="-1.69 3.95 -29.2"
+          rotation="0 -90 0" color="#d4a828" width="1.1" align="center"></a-text>
+
+  <!-- ── KERB STONES — cobble edge at base of walls ── -->
+  <a-box position="-1.93 0.04 -15" width="0.14" height="0.08" depth="30" color="#383530"></a-box>
+  <a-box position=" 1.93 0.04 -10" width="0.14" height="0.08" depth="20" color="#383530"></a-box>
 
   <!-- Pub side walls -->
   <a-box position="-2.175 5 -33" width="0.35" height="10" depth="6"
