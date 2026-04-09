@@ -132,8 +132,11 @@
   <a-light type="point" color="#ff7722" intensity="0.9" distance="9" decay="2"
            position="3 1.8 -22" fire-flicker></a-light>
   <!-- Pub interior warmth -->
-  <a-light type="point" color="#ffaa55" intensity="0.8" distance="6" decay="2"
+  <a-light type="point" color="#ffaa55" intensity="1.4" distance="9" decay="2"
            position="0 1.2 -29.4"></a-light>
+  <!-- Low ground-level amber at pub step to eliminate black area -->
+  <a-light type="point" color="#cc7722" intensity="0.6" distance="4" decay="2"
+           position="0 0.2 -29.0"></a-light>
   <!-- Amber window leaking light -->
   <a-light type="point" color="#ff9933" intensity="0.5" distance="4" decay="2"
            position="-1.9 5.0 -7"></a-light>
@@ -234,7 +237,7 @@
   -->
   <a-plane position="0 0.001 -15" rotation="-90 0 0" width="4.0" height="30"
     material="src: #road-diff; normalMap: #road-norm; roughnessMap: #road-rough;
-              repeat: 3 20; roughness: 0.94; metalness: 0">
+              repeat: 3 20; roughness: 0.72; metalness: 0.04">
   </a-plane>
   <!-- Side alley ground -->
   <a-plane position="6 0.001 -25" rotation="-90 0 0" width="8" height="10"
@@ -577,15 +580,47 @@
 
   <!-- ARP signs removed -->
 
-  <!-- ═══ REFERENCE PERSON BOX ═══
-       Exactly 1.8 m tall, 0.45 m wide — human scale reference.
-       Bright white so it's immediately obvious. Remove when scene is finalised.
+  <!-- Reference box removed — scale confirmed correct -->
+
+  <!-- ═══ RAIN PUDDLES ═══
+       High metalness + low roughness = mirror-like surface.
+       Emissive tinted to local light (amber near fire/lamps, cool near entrance).
+       Opacity animation simulates ripples from falling rain.
   -->
-  <a-box position="0.8 0.9 -3" width="0.45" height="1.8" depth="0.25" color="#e0e0e0"
-         material="color: #e0e0e0; emissive: #606060; emissiveIntensity: 0.5; roughness: 1; metalness: 0">
-  </a-box>
-  <a-text value="1.8 m" position="0.8 1.95 -3" rotation="0 0 0"
-          color="#ffffff" width="1.0" align="center"></a-text>
+  <!-- Entrance area — cool blue-grey sky reflection -->
+  <a-plane position="-0.5 0.006 -5" rotation="-90 0 18" width="0.85" height="0.42"
+    material="color: #181e2c; metalness: 0.88; roughness: 0.07; opacity: 0.78; transparent: true;
+              emissive: #080606; emissiveIntensity: 0.1"
+    animation="property: material.opacity; from: 0.78; to: 0.62; dur: 4200; dir: alternate; loop: true; easing: easeInOutSine">
+  </a-plane>
+
+  <!-- Mid-alley, beneath drainpipe — large puddle -->
+  <a-plane position="0.7 0.006 -13" rotation="-90 0 -7" width="1.3" height="0.58"
+    material="color: #141820; metalness: 0.90; roughness: 0.05; opacity: 0.84; transparent: true;
+              emissive: #1a0900; emissiveIntensity: 0.28"
+    animation="property: material.opacity; from: 0.84; to: 0.68; dur: 3700; dir: alternate; loop: true; easing: easeInOutSine">
+  </a-plane>
+
+  <!-- At side alley junction — catches fire glow strongly -->
+  <a-plane position="-0.4 0.006 -20" rotation="-90 0 11" width="0.9" height="0.44"
+    material="color: #1e1208; metalness: 0.88; roughness: 0.06; opacity: 0.82; transparent: true;
+              emissive: #2e1200; emissiveIntensity: 0.48"
+    animation="property: material.opacity; from: 0.82; to: 0.65; dur: 5200; dir: alternate; loop: true; easing: easeInOutSine">
+  </a-plane>
+
+  <!-- Near second lamp Z=-22 — amber glow from above -->
+  <a-plane position="0.6 0.006 -24" rotation="-90 0 -4" width="1.1" height="0.5"
+    material="color: #1c1206; metalness: 0.90; roughness: 0.05; opacity: 0.86; transparent: true;
+              emissive: #321600; emissiveIntensity: 0.42"
+    animation="property: material.opacity; from: 0.86; to: 0.70; dur: 3900; dir: alternate; loop: true; easing: easeInOutSine">
+  </a-plane>
+
+  <!-- Pub forecourt — warm amber, strongest fire reflection -->
+  <a-plane position="-0.6 0.006 -28" rotation="-90 0 6" width="0.72" height="0.38"
+    material="color: #221408; metalness: 0.92; roughness: 0.04; opacity: 0.85; transparent: true;
+              emissive: #3c1c00; emissiveIntensity: 0.58"
+    animation="property: material.opacity; from: 0.85; to: 0.68; dur: 4600; dir: alternate; loop: true; easing: easeInOutSine">
+  </a-plane>
 
   <!-- ═══ EXPLOSION FLASH — distant bombing, random intervals ═══ -->
   <a-light type="point" color="#c8d8ff" intensity="0" distance="60" decay="1"
@@ -731,8 +766,32 @@
   <a-box position=" 1.6 5.0 -29.91" rotation="0 0 45"  width="0.06" height="1.5" depth="0.04" color="#c4a030"></a-box>
   <a-box position=" 1.6 5.0 -29.91" rotation="0 0 -45" width="0.06" height="1.5" depth="0.04" color="#c4a030"></a-box>
 
+  <!-- ── Amber light seeping under pub door — imperfect blackout curtain ── -->
+  <a-plane position="0 0.003 -29.65" rotation="-90 0 0" width="1.0" height="0.18"
+    material="color: #ff8800; emissive: #cc5500; emissiveIntensity: 0.7; opacity: 0.22; transparent: true">
+  </a-plane>
+
   <!-- ── Pub doors ── -->
   <a-entity gltf-model="#pubdoors-glb" position="0 0 -29.85" rotation="0 180 0" scale="0.7 0.7 0.7"></a-entity>
+
+  <!-- ── WARTIME POSTER — west wall seg 2 near Z=-20 ──
+       Propaganda poster, partly ripped/water-damaged.
+       "CARELESS TALK COSTS LIVES" — genuine WWII slogan.
+  -->
+  <a-box position="-1.96 2.3 -20.5" width="0.03" height="1.05" depth="0.55"
+         material="color: #c0a850; emissive: #080600; emissiveIntensity: 0.08; roughness: 0.95; metalness: 0">
+  </a-box>
+  <!-- Red band at top -->
+  <a-box position="-1.93 2.75 -20.5" width="0.02" height="0.22" depth="0.52"
+         color="#761810">
+  </a-box>
+  <!-- Dark tear strip — poster partly ripped -->
+  <a-box position="-1.93 1.88 -20.7" width="0.02" height="0.32" depth="0.15" rotation="0 0 8"
+         color="#1a1206">
+  </a-box>
+  <a-text value="CARELESS TALK&#10;COSTS LIVES"
+          position="-1.91 2.35 -20.5" rotation="0 90 0"
+          color="#2a1e08" width="1.1" align="center"></a-text>
 
   <!-- ── HANGING PUB SIGN — bracket on west side of pub facade ──
        Iron bracket projects from face. Sign hangs, readable from alley.
