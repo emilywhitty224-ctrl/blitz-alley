@@ -135,12 +135,12 @@
             var mats = Array.isArray(node.material) ? node.material : [node.material];
             mats.forEach(function (mat) {
               if (!mat) return;
-              var c = mat.color;
-              var brightness = (c.r + c.g + c.b) / 3;
-              var isGlass = mat.metalness > 0.3 || brightness > 0.55;
+              // Only treat as glass if explicitly transparent — photogrammetry
+              // walls are often bright but are not glass, so don't use brightness
+              var isGlass = mat.transparent === true && mat.opacity < 0.8;
 
               if (isGlass) {
-                // Dark glass / metal — keep it near-black with faint amber leak
+                // Transparent surface — keep near-black with faint amber leak
                 mat.color.set(0x0a0804);
                 mat.emissive = mat.emissive || new THREE.Color(0x000000);
                 mat.emissive.set(0x1a0a00);
@@ -149,9 +149,7 @@
               } else {
                 // Wall / brick / plaster — apply brick texture with night tint
                 mat.map = brickTex;
-                // Reset to white so the texture colour isn't double-tinted
                 mat.color.set(0xffffff);
-                // Lerp toward dark to simulate night — 0.45 keeps the brick visible
                 mat.color.lerp(nightCol, 0.45);
                 mat.roughness = Math.min((mat.roughness || 0.8) + 0.15, 1.0);
               }
@@ -266,8 +264,8 @@
           var flying = false;
 
           if (rightCtrl) {
-            // Right trigger — show HUD and add capture (max 5)
-            rightCtrl.addEventListener('triggerdown', function () {
+            // Right thumbstick click — show HUD and capture XYZ (max 5)
+            rightCtrl.addEventListener('thumbstickdown', function () {
               if (self.coords.length >= 5) return;
               var p = new THREE.Vector3();
               rightCtrl.object3D.getWorldPosition(p);
@@ -275,18 +273,50 @@
               showHud();
               updateHud();
             });
+
             // B button — toggle fly / return to ground
             rightCtrl.addEventListener('bbuttondown', function () {
               flying = !flying;
               if (flying) {
-                rigEl.setAttribute('movement-controls', 'fly: true; speed: 3; camera: #cam');
+                rigEl.setAttribute('movement-controls', 'fly: true; speed: 1.5; camera: #cam');
               } else {
                 rigEl.setAttribute('movement-controls', 'fly: false; speed: 0.8; camera: #cam');
                 rigEl.object3D.position.y = 0;
               }
-              // Update B button label
               var bLbl = rightCtrl.querySelector('.lbl-b');
               if (bLbl) bLbl.setAttribute('text', 'value', flying ? 'B: land' : 'B: fly');
+            });
+
+            // A button — drop a 3 m XYZ reference marker at controller position
+            rightCtrl.addEventListener('abuttondown', function () {
+              var p = new THREE.Vector3();
+              rightCtrl.object3D.getWorldPosition(p);
+              var marker = document.createElement('a-entity');
+              marker.setAttribute('position', p.x + ' ' + p.y + ' ' + p.z);
+              // Y arm — green, 3 m tall, centred on drop point
+              var aY = document.createElement('a-box');
+              aY.setAttribute('position', '0 0 0');
+              aY.setAttribute('width',  '0.05'); aY.setAttribute('height', '3'); aY.setAttribute('depth', '0.05');
+              aY.setAttribute('material', 'color:#00ff44; emissive:#00cc33; emissiveIntensity:1; shader:flat');
+              marker.appendChild(aY);
+              // X arm — red, 3 m wide
+              var aX = document.createElement('a-box');
+              aX.setAttribute('position', '0 0 0');
+              aX.setAttribute('width',  '3'); aX.setAttribute('height', '0.05'); aX.setAttribute('depth', '0.05');
+              aX.setAttribute('material', 'color:#ff2222; emissive:#ff0000; emissiveIntensity:1; shader:flat');
+              marker.appendChild(aX);
+              // Z arm — blue, 3 m deep
+              var aZ = document.createElement('a-box');
+              aZ.setAttribute('position', '0 0 0');
+              aZ.setAttribute('width',  '0.05'); aZ.setAttribute('height', '0.05'); aZ.setAttribute('depth', '3');
+              aZ.setAttribute('material', 'color:#2244ff; emissive:#0022ff; emissiveIntensity:1; shader:flat');
+              marker.appendChild(aZ);
+              // White dot at origin
+              var dot = document.createElement('a-sphere');
+              dot.setAttribute('radius', '0.08');
+              dot.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
+              marker.appendChild(dot);
+              self.el.sceneEl.appendChild(marker);
             });
           }
 
@@ -396,85 +426,7 @@
   <!-- Gas lamp 2 -->
   <a-light type="point" color="#ffcc66" intensity="0.75" distance="6" decay="2"
            position="-1.75 3.1 -22"></a-light>
-  <!-- Searchlight -->
-  <a-entity position="0 42 -18" searchlight-sweep>
-    <a-light type="spot" color="#dde8ff" intensity="1.8" angle="2" penumbra="0.5"
-             distance="80" decay="1"></a-light>
-  </a-entity>
-
-  <a-sky color="#050402"></a-sky>
-  <a-entity star-field="count: 700"></a-entity>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       BOMBERS — Heinkel He 111 silhouettes crossing overhead
-       Lancaster-era wingspan ~30m, length ~21m.
-       No nav lights (blackout raid). Faint exhaust glow on engines.
-       Two aircraft at different altitudes and crossing angles.
-  ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Bomber 1 — crossing east to west, Y=52, slow pass -->
-  <a-entity
-    animation="property: position; from: -80 52 -12; to: 80 52 -18; dur: 52000; loop: true; easing: linear; delay: 0">
-    <!-- Fuselage -->
-    <a-box position="0 0 0"      width="1.8" height="1.4" depth="20"   color="#030201"></a-box>
-    <!-- Port wing -->
-    <a-box position="-9 -0.3 2"  width="18"  height="0.5" depth="6"    color="#030201"></a-box>
-    <!-- Starboard wing -->
-    <a-box position=" 9 -0.3 2"  width="18"  height="0.5" depth="6"    color="#030201"></a-box>
-    <!-- Tail horizontal -->
-    <a-box position="0  0.4 -9"  width="8"   height="0.4" depth="3"    color="#030201"></a-box>
-    <!-- Tail vertical fin -->
-    <a-box position="0  1.8 -9"  width="0.4" height="3.5" depth="3.5"  color="#030201"></a-box>
-    <!-- Engine nacelles (4) — faint orange exhaust glow -->
-    <a-box position="-5  -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position="-5 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.4; opacity:0.5; transparent:true"></a-sphere>
-    <a-box position="-11 -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position="-11 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.4; opacity:0.5; transparent:true"></a-sphere>
-    <a-box position=" 5  -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position=" 5 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.4; opacity:0.5; transparent:true"></a-sphere>
-    <a-box position=" 11 -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position=" 11 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.4; opacity:0.5; transparent:true"></a-sphere>
-  </a-entity>
-
-  <!-- Bomber 2 — crossing south to north (toward pub end), Y=46, slightly ahead of first -->
-  <a-entity
-    animation="property: position; from: 8 46 60; to: -4 46 -100; dur: 44000; loop: true; easing: linear; delay: 18000">
-    <a-box position="0 0 0"      width="1.8" height="1.4" depth="20"   color="#030201"></a-box>
-    <a-box position="-9 -0.3 2"  width="18"  height="0.5" depth="6"    color="#030201"></a-box>
-    <a-box position=" 9 -0.3 2"  width="18"  height="0.5" depth="6"    color="#030201"></a-box>
-    <a-box position="0  0.4 -9"  width="8"   height="0.4" depth="3"    color="#030201"></a-box>
-    <a-box position="0  1.8 -9"  width="0.4" height="3.5" depth="3.5"  color="#030201"></a-box>
-    <a-box position="-5  -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position="-5 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.35; opacity:0.5; transparent:true"></a-sphere>
-    <a-box position="-11 -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position="-11 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.35; opacity:0.5; transparent:true"></a-sphere>
-    <a-box position=" 5  -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position=" 5 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.35; opacity:0.5; transparent:true"></a-sphere>
-    <a-box position=" 11 -0.4 2" width="1.2" height="0.9" depth="5.5"  color="#030201"></a-box>
-    <a-sphere position=" 11 -0.4 5" radius="0.25"
-      material="color:#ff5500; emissive:#ff3300; emissiveIntensity:0.35; opacity:0.5; transparent:true"></a-sphere>
-  </a-entity>
-
-  <!-- Bomber 3 — distant, smaller, angled crossing Z=-5 area Y=62 -->
-  <a-entity
-    animation="property: position; from: 60 62 -5; to: -60 62 -22; dur: 68000; loop: true; easing: linear; delay: 6000">
-    <a-box position="0 0 0"      width="1.4" height="1.0" depth="15"   color="#020100"></a-box>
-    <a-box position="-7 -0.2 2"  width="14"  height="0.4" depth="5"    color="#020100"></a-box>
-    <a-box position=" 7 -0.2 2"  width="14"  height="0.4" depth="5"    color="#020100"></a-box>
-    <a-box position="0  0.3 -7"  width="6"   height="0.3" depth="2.5"  color="#020100"></a-box>
-    <a-box position="0  1.5 -7"  width="0.3" height="3"   depth="2.8"  color="#020100"></a-box>
-    <a-box position="-4  -0.3 2" width="1.0" height="0.7" depth="4.5"  color="#020100"></a-box>
-    <a-box position="-9  -0.3 2" width="1.0" height="0.7" depth="4.5"  color="#020100"></a-box>
-    <a-box position=" 4  -0.3 2" width="1.0" height="0.7" depth="4.5"  color="#020100"></a-box>
-    <a-box position=" 9  -0.3 2" width="1.0" height="0.7" depth="4.5"  color="#020100"></a-box>
-  </a-entity>
+  <a-sky color="#87ceeb"></a-sky>
 
   <!-- ═══════════════════════════════════════════════════════════════
        BARRAGE BALLOONS
@@ -943,12 +895,6 @@
     animation="property: material.opacity; from: 0.85; to: 0.68; dur: 4600; dir: alternate; loop: true; easing: easeInOutSine">
   </a-plane>
 
-  <!-- ═══ EXPLOSION FLASH — distant bombing, random intervals ═══ -->
-  <a-light type="point" color="#c8d8ff" intensity="0" distance="60" decay="1"
-           position="0 20 -15" explosion-flash="minGap: 10; maxGap: 30; duration: 0.1"></a-light>
-  <!-- Second flash at different timing, slightly different position -->
-  <a-light type="point" color="#d8c8a0" intensity="0" distance="50" decay="1"
-           position="8 18 -35" explosion-flash="minGap: 18; maxGap: 40; duration: 0.08"></a-light>
 
   <!-- ═══ SMOKE WISPS — rising from damaged east wall area ═══ -->
   <a-plane position="1.5 0 -16" rotation="-15 20 0" width="1.8" height="1.2"
@@ -1299,13 +1245,13 @@
 
     <a-entity oculus-touch-controls="hand: right">
       <!-- A button — bottom right of face -->
-      <a-text value="A: —" position="0.032 0.008 -0.052" rotation="-50 0 0"
-              color="#aaaaaa" width="0.16" align="left"></a-text>
+      <a-text value="A: ref mark" position="0.032 0.008 -0.052" rotation="-50 0 0"
+              color="#ffaa44" width="0.16" align="left"></a-text>
       <!-- B button — top left of face (dynamic label, updated by fly toggle) -->
       <a-text class="lbl-b" value="B: fly" position="-0.012 0.038 -0.052" rotation="-50 0 0"
               color="#88ff88" width="0.16" align="left"></a-text>
-      <!-- Trigger -->
-      <a-text value="trigger: capture" position="0.018 0.008 -0.082" rotation="-20 0 0"
+      <!-- Trigger (now unused for capture — moved to thumbstick click) -->
+      <a-text value="stick↓: capture" position="0.018 0.008 -0.082" rotation="-20 0 0"
               color="#ff8888" width="0.16" align="left"></a-text>
       <!-- Thumbstick -->
       <a-text value="stick: move" position="-0.01 0.048 -0.032" rotation="-70 0 0"
