@@ -344,9 +344,11 @@
         self.history    = [];
         self.originals  = {};
         self.bboxCache  = {};
-        self.bboxKeys   = []; // flat array of cache keys, updated by rebuildBbox — no Object.keys in tick
+        self.bboxKeys   = [];
         self.frameCount = 0;
         self.locked     = {};
+        self.cloneCounts = {};
+        self.nightMode  = false;
         // Pre-allocate tick vectors — never new() inside tick
         self._tickOrigin = new THREE.Vector3();
         self._tickDir    = new THREE.Vector3();
@@ -542,8 +544,17 @@
               outText.setAttribute('text', 'value', lines);
               outPanel.setAttribute('visible', 'true');
               outText.setAttribute('visible',  'true');
-              // Auto-copy to clipboard
+              // Auto-copy to clipboard + save to localStorage
               if (navigator.clipboard) navigator.clipboard.writeText(lines).catch(function(){});
+              try {
+                var layout = {};
+                document.querySelectorAll('.placeable').forEach(function (el) {
+                  var id2 = el.getAttribute('data-name');
+                  var p2  = el.object3D.position;
+                  layout[id2] = { x: p2.x, y: p2.y, z: p2.z, rotY: el.object3D.rotation.y, scale: el.object3D.scale.x };
+                });
+                localStorage.setItem('blitz-layout', JSON.stringify(layout));
+              } catch (e) {}
             });
 
             // X button — lock / unlock the hovered or held building
@@ -566,10 +577,12 @@
             });
           }
 
-          // ── Floating name labels + lock indicators above each building ──
-          document.querySelectorAll('.placeable').forEach(function (el) {
+          // ── Helpers ──────────────────────────────────────────────────
+          // Attach label + lock icon to a placeable entity and register it
+          function decoratePlaceable(el) {
             var name = el.getAttribute('data-name') || '';
             if (!name) return;
+
             var lbl = document.createElement('a-text');
             lbl.setAttribute('value', name);
             lbl.setAttribute('position', '0 8 0');
@@ -579,19 +592,12 @@
             lbl.setAttribute('material', 'shader:flat');
             el.appendChild(lbl);
 
-            // Lock indicator: red padlock icon (box + smaller box) above building
             var lockIcon = document.createElement('a-entity');
             lockIcon.setAttribute('position', '0 10 0');
             lockIcon.setAttribute('visible', 'false');
             var lockBody = document.createElement('a-box');
             lockBody.setAttribute('width', '0.6'); lockBody.setAttribute('height', '0.5'); lockBody.setAttribute('depth', '0.3');
-            lockBody.setAttribute('position', '0 0 0');
             lockBody.setAttribute('material', 'color:#ff3333; emissive:#ff2222; emissiveIntensity:1; shader:flat');
-            var lockShackle = document.createElement('a-torus');
-            lockShackle.setAttribute('radius', '0.22'); lockShackle.setAttribute('radius-tubular', '0.07');
-            lockShackle.setAttribute('arc', '180');
-            lockShackle.setAttribute('position', '0 0.32 0');
-            lockShackle.setAttribute('material', 'color:#ff3333; emissive:#ff2222; emissiveIntensity:1; shader:flat');
             var lockLbl = document.createElement('a-text');
             lockLbl.setAttribute('value', 'LOCKED');
             lockLbl.setAttribute('position', '0 -0.6 0');
@@ -600,11 +606,89 @@
             lockLbl.setAttribute('width', '5');
             lockLbl.setAttribute('material', 'shader:flat');
             lockIcon.appendChild(lockBody);
-            lockIcon.appendChild(lockShackle);
             lockIcon.appendChild(lockLbl);
             el.appendChild(lockIcon);
             self.locked[name] = { el: el, icon: lockIcon, state: false };
+          }
+
+          // Clone a held building and immediately hold the copy
+          function cloneHeld() {
+            if (!self.held) return;
+            var srcName = self.held.getAttribute('data-name');
+            self.cloneCounts[srcName] = (self.cloneCounts[srcName] || 0) + 1;
+            var newName = srcName + '-' + self.cloneCounts[srcName];
+
+            var clone = document.createElement('a-entity');
+            clone.setAttribute('class', 'placeable');
+            clone.setAttribute('data-name', newName);
+            clone.setAttribute('gltf-model', self.held.getAttribute('gltf-model'));
+            var p = self.held.object3D.position;
+            var sc = self.held.object3D.scale.x;
+            clone.setAttribute('position', (p.x + 4) + ' ' + p.y + ' ' + p.z);
+            clone.setAttribute('scale', sc + ' ' + sc + ' ' + sc);
+
+            clone.addEventListener('model-loaded', function () {
+              requestAnimationFrame(function () { rebuildBbox(clone); });
+            });
+            decoratePlaceable(clone);
+            self.el.sceneEl.appendChild(clone);
+
+            // Hand off hold to the clone
+            self.history.push({ el: clone, x: p.x + 4, y: p.y, z: p.z, rotY: 0, scale: sc });
+            self.held = clone;
+          }
+
+          // ── Floating name labels + lock indicators ────────────────────
+          document.querySelectorAll('.placeable').forEach(function (el) {
+            decoratePlaceable(el);
           });
+
+          // ── localStorage: load saved layout ──────────────────────────
+          try {
+            var saved = JSON.parse(localStorage.getItem('blitz-layout'));
+            if (saved) {
+              document.querySelectorAll('.placeable').forEach(function (el) {
+                var id = el.getAttribute('data-name');
+                var d  = saved[id];
+                if (!d) return;
+                el.addEventListener('model-loaded', function () {
+                  requestAnimationFrame(function () {
+                    el.object3D.position.set(d.x, d.y || 0, d.z);
+                    el.object3D.rotation.y = d.rotY || 0;
+                    el.object3D.scale.setScalar(d.scale);
+                  });
+                }, { once: true });
+              });
+            }
+          } catch (e) {}
+
+          // ── Night toggle (left trigger) ───────────────────────────────
+          var skyEl = document.querySelector('a-sky');
+          var sceneEl = self.el.sceneEl;
+          if (leftCtrl) {
+            leftCtrl.addEventListener('triggerdown', function () {
+              self.nightMode = !self.nightMode;
+              if (self.nightMode) {
+                if (skyEl) skyEl.setAttribute('color', '#020408');
+                sceneEl.setAttribute('fog', 'type: linear; color: #050810; near: 20; far: 70');
+                sceneEl.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08');
+              } else {
+                if (skyEl) skyEl.setAttribute('color', '#87ceeb');
+                sceneEl.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
+                sceneEl.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
+              }
+            });
+          }
+
+          // ── Right A: floor snap | Right thumbstick click: clone ───────
+          if (rightCtrl) {
+            rightCtrl.addEventListener('abuttondown', function () {
+              if (self.held) self.held.object3D.position.y = 0;
+            });
+            rightCtrl.addEventListener('thumbstickdown', function () {
+              cloneHeld();
+            });
+          }
 
         });
       },
@@ -753,9 +837,9 @@
   <a-box position="-3.5 0.02 -33" rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
 
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
-  <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
+  <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="2.0"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move XZ&#10;STICK L/R (L)     spin&#10;STICK U/D (L)     push into ground&#10;STICK U/D (R)     scale&#10;STICK CLICK (L)   undo&#10;GRIP (L)          height post&#10;GRIP (L)+GRIP (R) reset&#10;X (L)             lock / unlock&#10;Y (L)             export + copy"
+  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move XZ&#10;STICK L/R (L)     spin&#10;STICK U/D (L)     push into ground&#10;STICK U/D (R)     scale up / down&#10;A (R)             snap to floor&#10;STICK CLICK (R)   clone building&#10;TRIGGER (L)       night preview&#10;STICK CLICK (L)   undo&#10;GRIP (L)          height post&#10;X (L)             lock / unlock&#10;Y (L)             save + export"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
