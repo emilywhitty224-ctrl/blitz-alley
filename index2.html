@@ -91,13 +91,17 @@
 
     // ── GROUND CLAMP ────────────────────────────────────────────────────
     // Automatically shifts any GLB so its lowest point sits exactly at Y=0.
+    // Defers one frame so the model is fully in the scene graph before measuring.
     AFRAME.registerComponent('ground-clamp', {
       init: function () {
         var el = this.el;
         el.addEventListener('model-loaded', function () {
-          var box = new THREE.Box3().setFromObject(el.object3D);
-          if (box.isEmpty()) return;
-          el.object3D.position.y -= box.min.y;
+          requestAnimationFrame(function () {
+            el.object3D.position.y = 0; // reset before measuring
+            var box = new THREE.Box3().setFromObject(el.object3D);
+            if (box.isEmpty()) return;
+            el.object3D.position.y = -box.min.y;
+          });
         });
       }
     });
