@@ -342,6 +342,8 @@
         self.hovered    = null;
         self.history    = []; // undo stack [{el, x, z, rotY, scale}]
         self.originals  = {}; // reset map keyed by data-name
+        self.bboxCache  = {}; // cached bounding boxes keyed by data-name — rebuilt on move
+        self.frameCount = 0;  // throttle hover checks
 
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
@@ -349,7 +351,18 @@
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
 
-          // ── Store original positions for reset ───────────────────
+          // ── Store originals + build bbox cache after models settle ──
+          function rebuildBbox(el) {
+            var id  = el.getAttribute('data-name');
+            var box = new THREE.Box3().setFromObject(el.object3D);
+            self.bboxCache[id] = { el: el, box: box };
+          }
+          // Rebuild cache when any model finishes loading
+          document.querySelectorAll('.placeable').forEach(function (el) {
+            el.addEventListener('model-loaded', function () {
+              requestAnimationFrame(function () { rebuildBbox(el); });
+            });
+          });
           requestAnimationFrame(function () {
             document.querySelectorAll('.placeable').forEach(function (el) {
               var id = el.getAttribute('data-name');
@@ -359,6 +372,7 @@
                 rotY: el.object3D.rotation.y,
                 scale: el.object3D.scale.x
               };
+              rebuildBbox(el);
             });
           });
 
@@ -417,9 +431,8 @@
               self.gripping = true;
               laserPivot.setAttribute('visible', 'true');
               if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: false');
-              // selection happens in tick via hover — held = hovered on grip
+              // Use whatever was hovered (from cheap bbox check) as the held target
               if (self.hovered) {
-                // save to undo history before moving
                 self.history.push({
                   el:    self.hovered,
                   x:     self.hovered.object3D.position.x,
@@ -557,8 +570,10 @@
       tick: function () {
         if (!this.laserPivot || !this._setHighlight) return;
 
-        // ── Live hover: cast ray every frame when laser is on ────
-        if (this.gripping) {
+        // ── Hover: ray vs cached bounding BOXES only — runs every 6 frames ─
+        // Full mesh intersection every frame crashed Quest. Bbox is near-free.
+        this.frameCount = (this.frameCount || 0) + 1;
+        if (this.gripping && this.frameCount % 6 === 0) {
           var origin = new THREE.Vector3();
           var dir    = new THREE.Vector3(0, 0, -1);
           this.laserPivot.object3D.getWorldPosition(origin);
@@ -566,38 +581,33 @@
           dir.applyQuaternion(this.tmpQuat).normalize();
           this.raycaster.set(origin, dir);
 
-          var meshes = [], elMap = [];
-          document.querySelectorAll('.placeable').forEach(function (el) {
-            el.object3D.traverse(function (node) {
-              if (node.isMesh) { meshes.push(node); elMap.push({ mesh: node, el: el }); }
-            });
-          });
-
-          var hits = this.raycaster.intersectObjects(meshes, false);
           var newHovered = null;
-          if (hits.length > 0) {
-            var hitMesh = hits[0].object;
-            for (var i = 0; i < elMap.length; i++) {
-              if (elMap[i].mesh === hitMesh) { newHovered = elMap[i].el; break; }
+          var bestDist   = Infinity;
+          var cache      = this.bboxCache;
+          Object.keys(cache).forEach(function (id) {
+            var entry = cache[id];
+            // Update bbox position since building may have moved
+            entry.box.setFromObject(entry.el.object3D);
+            var dist = new THREE.Vector3();
+            if (this.raycaster.ray.intersectBox(entry.box, dist) !== null) {
+              var d = origin.distanceTo(dist);
+              if (d < bestDist) { bestDist = d; newHovered = entry.el; }
             }
-          }
+          }.bind(this));
 
-          // Update highlight if hovered target changed
           if (newHovered !== this.hovered) {
             if (this.hovered && this.hovered !== this.held) this._setHighlight(this.hovered, false);
             this.hovered = newHovered;
-            if (this.hovered) this._setHighlight(this.hovered, true);
+            if (this.hovered && this.hovered !== this.held) this._setHighlight(this.hovered, true);
           }
-
-          // On gripdown the held was set from hovered — keep highlight on held
         }
 
         if (!this.held) return;
 
         // ── Move: grip + trigger ─────────────────────────────────
         if (this.moving) {
-          var o2  = new THREE.Vector3();
-          var d2  = new THREE.Vector3(0, 0, -1);
+          var o2 = new THREE.Vector3();
+          var d2 = new THREE.Vector3(0, 0, -1);
           this.laserPivot.object3D.getWorldPosition(o2);
           this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
           d2.applyQuaternion(this.tmpQuat).normalize();
@@ -611,7 +621,7 @@
           }
         }
 
-        // ── Spin — only when trigger NOT held (mutually exclusive with move) ─
+        // ── Spin — only when trigger NOT held ───────────────────
         if (!this.moving && Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
@@ -646,8 +656,8 @@
   star-field
   vr-placer
   fog="type: linear; color: #b0c8e8; near: 60; far: 120"
-  renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true; exposure: 1.0"
-  shadow="type: pcfsoft"
+  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
+  shadow="type: basic"
   background="color: #87ceeb">
 
   <a-assets timeout="90000">
@@ -663,12 +673,7 @@
   <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>
   <a-light type="hemisphere" color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
   <a-light type="directional" color="#ffffff" intensity="1.8"
-           position="-5 20 10"
-           castShadow="true"
-           shadow-camera-near="0.5" shadow-camera-far="80"
-           shadow-camera-left="-40" shadow-camera-right="40"
-           shadow-camera-top="40" shadow-camera-bottom="-40"
-           shadow-map-width="2048" shadow-map-height="2048"></a-light>
+           position="-5 20 10"></a-light>
   <a-light type="point" color="#ff7722" intensity="0.7" distance="50" decay="1.4"
            position="0 3 -50" fire-flicker></a-light>
 
@@ -728,10 +733,7 @@
     position="16 0 -45" rotation="0 0 0" scale="0.962 0.962 0.962">
   </a-entity>
 
-  <a-entity class="placeable" data-name="antique" id="b-antique"
-    gltf-model="#antique-glb"
-    position="24 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
-  </a-entity>
+  <!-- antique shop temporarily removed — 33MB causes Quest memory issues -->
 
   <a-entity class="placeable" data-name="fence" id="b-fence"
     gltf-model="#fence-glb"
