@@ -6,9 +6,8 @@
   <title>Blackout Alley — London, 1940</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
-  <!-- Draco decoder — needed to parse Draco-compressed GLB files.
-       Sets A-Frame's GLTF loader to fetch the WASM decoder from Google CDN
-       (cached after first load, so only downloads once per device). -->
+
+  <!-- Draco decoder — needed to parse Draco-compressed GLB files. -->
   <script>
     AFRAME.registerComponent('draco-loader', {
       init: function () {
@@ -21,6 +20,7 @@
       }
     });
   </script>
+
   <script>
     AFRAME.registerComponent('fire-flicker', {
       schema: { min: { default: 0.6 }, max: { default: 1.6 }, chance: { default: 0.08 } },
@@ -31,73 +31,22 @@
         }
       }
     });
-    // Random distant explosion flash
-    AFRAME.registerComponent('explosion-flash', {
-      schema: { minGap: { default: 8 }, maxGap: { default: 25 }, duration: { default: 0.12 } },
-      init: function () {
-        this.timer = 3 + Math.random() * 10;
-        this.active = false;
-        this.elapsed = 0;
-      },
-      tick: function (time, dt) {
-        var s = dt / 1000;
-        if (!this.active) {
-          this.timer -= s;
-          if (this.timer <= 0) {
-            this.active = true;
-            this.elapsed = 0;
-            this.el.setAttribute('light', 'intensity', 4.0);
-            this.timer = this.data.minGap + Math.random() * (this.data.maxGap - this.data.minGap);
-          }
-        } else {
-          this.elapsed += s;
-          if (this.elapsed >= this.data.duration) {
-            this.active = false;
-            this.el.setAttribute('light', 'intensity', 0);
-          }
-        }
-      }
-    });
 
-    // Slow upward smoke drift
-    AFRAME.registerComponent('smoke-drift', {
-      schema: { speed: { default: 0.3 }, range: { default: 6 }, startY: { default: 1 } },
-      init: function () {
-        this.y = this.data.startY + Math.random() * 3;
-        this.el.setAttribute('position', this.el.getAttribute('position').x + ' ' + this.y + ' ' + this.el.getAttribute('position').z);
-      },
-      tick: function (time, dt) {
-        this.y += this.data.speed * (dt / 1000);
-        var pos = this.el.getAttribute('position');
-        if (this.y > this.data.startY + this.data.range) this.y = this.data.startY;
-        this.el.setAttribute('position', pos.x + ' ' + this.y + ' ' + pos.z);
-      }
-    });
-
-    AFRAME.registerComponent('searchlight-sweep', {
-      schema: { swing: { default: 18 }, speed: { default: 0.1 } },
-      init: function () { this.t = 0; },
-      tick: function (time, dt) {
-        this.t += this.data.speed * (dt / 1000);
-        this.el.setAttribute('rotation', '72 ' + (Math.sin(this.t) * this.data.swing).toFixed(2) + ' 0');
-      }
-    });
-
-    // Star field — THREE.js points scattered in dome above alley
+    // Star field — THREE.js points scattered in dome above scene
     AFRAME.registerComponent('star-field', {
-      schema: { count: { type: 'int', default: 700 } },
+      schema: { count: { type: 'int', default: 800 } },
       init: function () {
         var geo = new THREE.BufferGeometry();
         var pos = [];
         var n = this.data.count;
         for (var i = 0; i < n; i++) {
           var theta = Math.random() * Math.PI * 2;
-          var phi   = Math.random() * Math.PI * 0.42;
-          var r     = 75 + Math.random() * 25;
+          var phi   = Math.random() * Math.PI * 0.45;
+          var r     = 80 + Math.random() * 30;
           pos.push(
             r * Math.sin(phi) * Math.cos(theta),
-            r * Math.cos(phi) + 8,
-            r * Math.sin(phi) * Math.sin(theta) - 15
+            r * Math.cos(phi) + 10,
+            r * Math.sin(phi) * Math.sin(theta) - 40
           );
         }
         geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -109,30 +58,28 @@
       }
     });
 
-    // ── VICTORIAN NIGHT TINT ────────────────────────────────────────────
-    // victorian-night component — texture removed, original GLB materials used as-is.
-    // Kept as a no-op so the attribute on the entity doesn't cause errors.
+    // No-op kept so attribute doesn't throw if still present on entities
     AFRAME.registerComponent('victorian-night', { init: function () {} });
 
     // ── GROUND CLAMP ────────────────────────────────────────────────────
     // Automatically shifts any GLB so its lowest point sits exactly at Y=0.
-    // Add ground-clamp to any imported building entity — no manual Y tweaking needed.
     AFRAME.registerComponent('ground-clamp', {
       init: function () {
         var el = this.el;
         el.addEventListener('model-loaded', function () {
           var box = new THREE.Box3().setFromObject(el.object3D);
           if (box.isEmpty()) return;
-          // Shift entity up so the bottom of the model is exactly at ground (Y=0)
           el.object3D.position.y -= box.min.y;
         });
       }
     });
 
     // ── COORD CAPTURE ───────────────────────────────────────────────────
-    // RIGHT trigger: capture controller XYZ (up to 5, listed on HUD).
-    // LEFT trigger: clear the list.
-    // A button (right controller): toggle 3-metre calibration marker sticks.
+    // Right thumbstick click : capture controller XYZ (up to 5, listed on HUD)
+    // Left trigger            : clear list + hide HUD
+    // X button (left)         : toggle calibration marker sticks
+    // B button (right)        : toggle fly mode
+    // A button (right)        : drop a 3 m XYZ reference marker at controller position
     AFRAME.registerComponent('coord-capture', {
       init: function () {
         var self = this;
@@ -142,7 +89,7 @@
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam = document.querySelector('#cam');
 
-          // HUD panel — hidden until first right trigger press
+          // HUD panel — hidden until first capture
           var panel = document.createElement('a-plane');
           panel.setAttribute('position', '0.34 -0.30 -0.5');
           panel.setAttribute('width', '0.58');
@@ -152,12 +99,12 @@
           cam.appendChild(panel);
           self.panel = panel;
 
-          // Coord readout text — hidden until first right trigger press
-          self.hud = document.createElement('a-entity');
-          self.hud.setAttribute('position', '0.07 -0.16 -0.49');
-          self.hud.setAttribute('text', 'value: ; color:#44ff88; align:left; width:0.76');
-          self.hud.setAttribute('visible', 'false');
-          cam.appendChild(self.hud);
+          var hud = document.createElement('a-entity');
+          hud.setAttribute('position', '0.07 -0.16 -0.49');
+          hud.setAttribute('text', 'value: ; color:#44ff88; align:left; width:0.76');
+          hud.setAttribute('visible', 'false');
+          cam.appendChild(hud);
+          self.hud = hud;
 
           function fmt(n) { return (n >= 0 ? ' ' : '') + n.toFixed(3); }
           function showHud() {
@@ -177,34 +124,28 @@
             self.hud.setAttribute('text', 'value', lines);
           }
 
-          // ── Calibration marker sticks every 3 m along the alley ──────
+          // ── Calibration marker sticks every 3 m along Z axis ──────────
           var markersEl = document.createElement('a-entity');
           markersEl.setAttribute('id', 'cal-markers');
           markersEl.setAttribute('visible', 'false');
           self.el.sceneEl.appendChild(markersEl);
 
-          var matY = 'color:#ffdd00; emissive:#ffaa00; emissiveIntensity:0.9; shader:flat';
-          var matX = 'color:#ff4444; emissive:#ff2200; emissiveIntensity:0.9; shader:flat';
-          var matZ = 'color:#4488ff; emissive:#2244ff; emissiveIntensity:0.9; shader:flat';
-
+          var matY    = 'color:#ffdd00; emissive:#ffaa00; emissiveIntensity:0.9; shader:flat';
+          var matX    = 'color:#ff4444; emissive:#ff2200; emissiveIntensity:0.9; shader:flat';
+          var matZ    = 'color:#4488ff; emissive:#2244ff; emissiveIntensity:0.9; shader:flat';
           var matTick = 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat';
 
-          for (var z = 0; z >= -30; z -= 3) {
-            // Y axis — yellow vertical stick, 2 m tall
+          for (var z = 0; z >= -60; z -= 3) {
             var stickY = document.createElement('a-box');
             stickY.setAttribute('position', '0 1 ' + z);
-            stickY.setAttribute('width', '0.06');
-            stickY.setAttribute('height', '2');
-            stickY.setAttribute('depth', '0.06');
+            stickY.setAttribute('width', '0.06'); stickY.setAttribute('height', '2'); stickY.setAttribute('depth', '0.06');
             stickY.setAttribute('material', matY);
             markersEl.appendChild(stickY);
 
-            // Height reference tick at 1.73 m (Emily, 5'8")
+            // Height tick at 1.73 m (5'8")
             var tick = document.createElement('a-box');
             tick.setAttribute('position', '0 1.73 ' + z);
-            tick.setAttribute('width', '0.28');
-            tick.setAttribute('height', '0.04');
-            tick.setAttribute('depth', '0.04');
+            tick.setAttribute('width', '0.28'); tick.setAttribute('height', '0.04'); tick.setAttribute('depth', '0.04');
             tick.setAttribute('material', matTick);
             markersEl.appendChild(tick);
             var tickLbl = document.createElement('a-text');
@@ -215,25 +156,18 @@
             tickLbl.setAttribute('align', 'left');
             markersEl.appendChild(tickLbl);
 
-            // X axis — red arm, 2 m wide (centred, so ±1 m each side)
             var armX = document.createElement('a-box');
             armX.setAttribute('position', '0 1 ' + z);
-            armX.setAttribute('width', '2');
-            armX.setAttribute('height', '0.06');
-            armX.setAttribute('depth', '0.06');
+            armX.setAttribute('width', '2'); armX.setAttribute('height', '0.06'); armX.setAttribute('depth', '0.06');
             armX.setAttribute('material', matX);
             markersEl.appendChild(armX);
 
-            // Z axis — blue arm, 2 m deep (±1 m along alley)
             var armZ = document.createElement('a-box');
             armZ.setAttribute('position', '0 1 ' + z);
-            armZ.setAttribute('width', '0.06');
-            armZ.setAttribute('height', '0.06');
-            armZ.setAttribute('depth', '2');
+            armZ.setAttribute('width', '0.06'); armZ.setAttribute('height', '0.06'); armZ.setAttribute('depth', '2');
             armZ.setAttribute('material', matZ);
             markersEl.appendChild(armZ);
 
-            // Label
             var lbl = document.createElement('a-text');
             lbl.setAttribute('value', 'Z=' + z + 'm');
             lbl.setAttribute('position', '0.12 2.2 ' + z);
@@ -243,15 +177,13 @@
             markersEl.appendChild(lbl);
           }
 
-          // ── Controller wiring — query by hand attribute directly ─────
+          // ── Controller wiring ──────────────────────────────────────────
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
-
-          var rigEl  = document.querySelector('#rig');
-          var flying = false;
+          var rigEl     = document.querySelector('#rig');
+          var flying    = false;
 
           if (rightCtrl) {
-            // Right thumbstick click — show HUD and capture XYZ (max 5)
             rightCtrl.addEventListener('thumbstickdown', function () {
               if (self.coords.length >= 5) return;
               var p = new THREE.Vector3();
@@ -261,7 +193,6 @@
               updateHud();
             });
 
-            // B button — toggle fly / return to ground
             rightCtrl.addEventListener('bbuttondown', function () {
               flying = !flying;
               if (flying) {
@@ -274,31 +205,26 @@
               if (bLbl) bLbl.setAttribute('text', 'value', flying ? 'B: land' : 'B: fly');
             });
 
-            // A button — drop a 3 m XYZ reference marker at controller position
             rightCtrl.addEventListener('abuttondown', function () {
               var p = new THREE.Vector3();
               rightCtrl.object3D.getWorldPosition(p);
               var marker = document.createElement('a-entity');
               marker.setAttribute('position', p.x + ' ' + p.y + ' ' + p.z);
-              // Y arm — green, 3 m tall, centred on drop point
               var aY = document.createElement('a-box');
               aY.setAttribute('position', '0 0 0');
-              aY.setAttribute('width',  '0.05'); aY.setAttribute('height', '3'); aY.setAttribute('depth', '0.05');
+              aY.setAttribute('width', '0.05'); aY.setAttribute('height', '3'); aY.setAttribute('depth', '0.05');
               aY.setAttribute('material', 'color:#00ff44; emissive:#00cc33; emissiveIntensity:1; shader:flat');
               marker.appendChild(aY);
-              // X arm — red, 3 m wide
               var aX = document.createElement('a-box');
               aX.setAttribute('position', '0 0 0');
-              aX.setAttribute('width',  '3'); aX.setAttribute('height', '0.05'); aX.setAttribute('depth', '0.05');
+              aX.setAttribute('width', '3'); aX.setAttribute('height', '0.05'); aX.setAttribute('depth', '0.05');
               aX.setAttribute('material', 'color:#ff2222; emissive:#ff0000; emissiveIntensity:1; shader:flat');
               marker.appendChild(aX);
-              // Z arm — blue, 3 m deep
               var aZ = document.createElement('a-box');
               aZ.setAttribute('position', '0 0 0');
-              aZ.setAttribute('width',  '0.05'); aZ.setAttribute('height', '0.05'); aZ.setAttribute('depth', '3');
+              aZ.setAttribute('width', '0.05'); aZ.setAttribute('height', '0.05'); aZ.setAttribute('depth', '3');
               aZ.setAttribute('material', 'color:#2244ff; emissive:#0022ff; emissiveIntensity:1; shader:flat');
               marker.appendChild(aZ);
-              // White dot at origin
               var dot = document.createElement('a-sphere');
               dot.setAttribute('radius', '0.08');
               dot.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
@@ -308,12 +234,10 @@
           }
 
           if (leftCtrl) {
-            // Left trigger — hide HUD and clear all captures
             leftCtrl.addEventListener('triggerdown', function () {
               self.coords = [];
               hideHud();
             });
-            // X button — toggle calibration sticks
             leftCtrl.addEventListener('xbuttondown', function () {
               self.markersVisible = !self.markersVisible;
               markersEl.setAttribute('visible', self.markersVisible ? 'true' : 'false');
@@ -323,8 +247,8 @@
       }
     });
   </script>
+
   <script>
-    // Unlock AudioContext on first interaction — required by all modern browsers & Quest
     function unlockAudio() {
       var ctx = AFRAME.THREE.AudioContext.getContext();
       if (ctx && ctx.state === 'suspended') ctx.resume();
@@ -332,7 +256,6 @@
     ['click','touchstart','touchend'].forEach(function(e) {
       document.addEventListener(e, unlockAudio);
     });
-    // Also unlock when entering VR — the headset button counts as an interaction
     window.addEventListener('load', function() {
       var scene = document.querySelector('a-scene');
       if (scene) scene.addEventListener('enter-vr', unlockAudio);
@@ -343,910 +266,73 @@
 <a-scene
   draco-loader
   coord-capture
-  fog="type: linear; color: #b0c8e8; near: 60; far: 120"
+  star-field
+  fog="type: linear; color: #050810; near: 40; far: 90"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
-  background="color: #87ceeb">
+  background="color: #050810">
 
   <a-assets timeout="90000">
-    <img id="brick-diff"  src="brown_brick_diffuse.jpg">
-    <img id="brick-norm"  src="brown_brick_normal.jpg">
-    <img id="brick-rough" src="brown_brick_roughness.jpg">
-    <img id="brick-ao"    src="brown_brick_ao.jpg">
-    <img id="stone-diff"  src="sandstone_diffuse.jpg">
-    <img id="stone-ao"    src="sandstone_ao.jpg">
-    <img id="stone-rough" src="Sandstone_Rough.jpg">
-    <img id="road-diff"   src="street_diffuse.jpg">
-    <img id="road-norm"   src="street_normal.jpg">
-    <img id="road-rough"  src="street_roughness.jpg">
-    <img id="pub-diff"    src="pub_tile_diffuse.jpg">
-    <img id="pub-norm"    src="pub_tile_normal.jpg">
-    <img id="pub-rough"   src="pub_tile_roughness.jpg">
-    <audio id="blitz-snd" src="blitz.mp3" preload="auto"></audio>
-    <a-asset-item id="pubdoors-glb" src="Pubdoors.glb"></a-asset-item>
-    <a-asset-item id="barrel-glb"   src="woodenbarrel.glb"></a-asset-item>
-    <a-asset-item id="sandbag-glb"  src="Sandbagwall.glb"></a-asset-item>
-    <a-asset-item id="lamp-glb"    src="Streetlamp.glb"></a-asset-item>
-    <a-asset-item id="arch-glb"      src="gunnersbury_arch.glb"></a-asset-item>
+    <a-asset-item id="arch-glb"       src="gunnersbury_arch.glb"></a-asset-item>
     <a-asset-item id="gatehouse-glb"  src="st_bartholomews_gatehouse.glb"></a-asset-item>
     <a-asset-item id="princelet-glb"  src="4_princelet_street.glb"></a-asset-item>
   </a-assets>
 
-  <a-entity sound="src: #blitz-snd; autoplay: true; loop: true; volume: 0.9; positional: false"></a-entity>
-
-  <!-- ═══ LIGHTING ═══
-       Cool blue-grey ambient = moonlight through smoke.
-       Fire = warm amber at end, hotter orange-red in side alley.
-       Lamps = barely on (blackout). No pure red wash.
-  -->
-  <!-- TEMP DAYLIGHT — revert to night values when done building -->
-  <a-light type="ambient"     color="#ffffff" intensity="1.2"></a-light>
-  <a-light type="hemisphere" color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
-  <a-light type="directional" color="#ffffff" intensity="1.8" position="3 12 8"
+  <!-- ═══ LIGHTING ═══ -->
+  <!-- Cool moonlight ambient -->
+  <a-light type="ambient" color="#1a2035" intensity="0.9"></a-light>
+  <!-- Directional moon — soft blue-white from above -->
+  <a-light type="directional" color="#8090c8" intensity="0.4"
+           position="-5 20 10"
            castShadow="true"
-           shadow-camera-near="0.5" shadow-camera-far="60"
-           shadow-camera-left="-20" shadow-camera-right="20"
-           shadow-camera-top="20" shadow-camera-bottom="-20"
+           shadow-camera-near="0.5" shadow-camera-far="80"
+           shadow-camera-left="-40" shadow-camera-right="40"
+           shadow-camera-top="40" shadow-camera-bottom="-40"
            shadow-map-width="2048" shadow-map-height="2048"></a-light>
-
-  <!-- Amber fire glow at pub end -->
-  <a-light type="point" color="#ff9933" intensity="1.1" distance="18" decay="2"
-           position="0 2.5 -29" fire-flicker></a-light>
-  <!-- Hot fire in side alley -->
-  <a-light type="point" color="#ff5500" intensity="2.2" distance="20" decay="1.6"
-           position="8 2 -25" fire-flicker></a-light>
-  <!-- Fire spill into main alley at gap -->
-  <a-light type="point" color="#ff7722" intensity="0.9" distance="9" decay="2"
-           position="3 1.8 -22" fire-flicker></a-light>
-  <!-- Pub interior warmth -->
-  <a-light type="point" color="#ffaa55" intensity="1.4" distance="9" decay="2"
-           position="0 1.2 -29.4"></a-light>
-  <!-- Low ground-level amber at pub step to eliminate black area -->
-  <a-light type="point" color="#cc7722" intensity="0.6" distance="4" decay="2"
-           position="0 0.2 -29.0"></a-light>
-  <!-- Amber window leaking light -->
-  <a-light type="point" color="#ff9933" intensity="0.5" distance="4" decay="2"
-           position="-1.9 5.0 -7"></a-light>
-  <!-- Gas lamp 1 -->
-  <a-light type="point" color="#ffcc66" intensity="0.9" distance="7" decay="2"
-           position="-1.75 3.1 -10"></a-light>
-  <!-- Gas lamp 2 -->
-  <a-light type="point" color="#ffcc66" intensity="0.75" distance="6" decay="2"
-           position="-1.75 3.1 -22"></a-light>
-  <a-sky color="#87ceeb"></a-sky>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       BARRAGE BALLOONS
-       Real balloons: ~19 m long, ~8 m diameter, silver fabric.
-       Cables were ~7 mm steel wire — shown as thin 0.05 m boxes.
-       Positioned at realistic altitudes (45–65 m) above the alley.
-       Each balloon: elongated ellipsoid (sphere scaled on parent entity)
-                     + two stabilising tail fins at the rear.
-  ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Balloon 1 — high above west side, tilted slightly nose-up in wind -->
-  <a-entity position="-12 55 -20" rotation="0 20 -8">
-    <!-- Main gas bag: 19 m long, 8 m tall, 7 m wide -->
-    <a-entity scale="1 1 1">
-      <a-sphere radius="4.5"
-                material="color: #9eb0a4; roughness: 0.3; metalness: 0.45;
-                          emissive: #2a3830; emissiveIntensity: 0.1"
-                geometry="primitive: sphere; segmentsWidth: 12; segmentsHeight: 8"
-                scale="2.1 1 0.85"></a-sphere>
-    </a-entity>
-    <!-- Tail fin — vertical -->
-    <a-box position="-7.5 1.5 0" width="3.5" height="2.2" depth="0.18" rotation="0 0 18"
-           material="color: #8aa09a; roughness: 0.4; metalness: 0.35"></a-box>
-    <!-- Tail fin — horizontal left -->
-    <a-box position="-7.5 0 -1.8" width="3.5" height="0.18" depth="2.2" rotation="0 -10 8"
-           material="color: #8aa09a; roughness: 0.4; metalness: 0.35"></a-box>
-    <!-- Tail fin — horizontal right -->
-    <a-box position="-7.5 0  1.8" width="3.5" height="0.18" depth="2.2" rotation="0  10 8"
-           material="color: #8aa09a; roughness: 0.4; metalness: 0.35"></a-box>
-    <!-- Nose attachment point (small dark fitting) -->
-    <a-box position="9.5 0 0" width="0.4" height="0.4" depth="0.4" color="#2a2820"></a-box>
-  </a-entity>
-  <!-- Cable 1 — runs from nose fitting down toward ground, slight angle from wind -->
-  <a-box position="-9.5 27 -18" width="0.05" height="56" depth="0.05"
-         color="#3a3830" rotation="0 0 12"></a-box>
-
-  <!-- Balloon 2 — lower, more central, directly overhead mid-alley -->
-  <a-entity position="3 42 -25" rotation="0 -15 5">
-    <a-entity scale="1 1 1">
-      <a-sphere radius="4"
-                material="color: #a8b8ac; roughness: 0.28; metalness: 0.5;
-                          emissive: #303c34; emissiveIntensity: 0.08"
-                geometry="primitive: sphere; segmentsWidth: 12; segmentsHeight: 8"
-                scale="2.2 1 0.9"></a-sphere>
-    </a-entity>
-    <a-box position="-7 1.2 0"  width="3.2" height="2.0" depth="0.16" rotation="0 0 15"
-           material="color: #90a898; roughness: 0.4; metalness: 0.35"></a-box>
-    <a-box position="-7 0 -1.6" width="3.2" height="0.16" depth="2.0" rotation="0 -8 6"
-           material="color: #90a898; roughness: 0.4; metalness: 0.35"></a-box>
-    <a-box position="-7 0  1.6" width="3.2" height="0.16" depth="2.0" rotation="0  8 6"
-           material="color: #90a898; roughness: 0.4; metalness: 0.35"></a-box>
-    <a-box position="8.8 0 0" width="0.4" height="0.4" depth="0.4" color="#2a2820"></a-box>
-  </a-entity>
-  <!-- Cable 2 -->
-  <a-box position="5 21 -24" width="0.05" height="42" depth="0.05"
-         color="#3a3830" rotation="0 0 -8"></a-box>
-
-  <!-- Balloon 3 — high and far, east side, visible above damaged roofline -->
-  <a-entity position="18 65 -35" rotation="0 35 3">
-    <a-entity scale="1 1 1">
-      <a-sphere radius="4.2"
-                material="color: #909e98; roughness: 0.32; metalness: 0.42;
-                          emissive: #282e28; emissiveIntensity: 0.07"
-                geometry="primitive: sphere; segmentsWidth: 12; segmentsHeight: 8"
-                scale="2.0 1 0.88"></a-sphere>
-    </a-entity>
-    <a-box position="-6.5 1.0 0"  width="3.0" height="1.8" depth="0.15" rotation="0 0 12"
-           material="color: #808e88; roughness: 0.4; metalness: 0.35"></a-box>
-    <a-box position="-6.5 0 -1.5" width="3.0" height="0.15" depth="1.8" rotation="0 -12 5"
-           material="color: #808e88; roughness: 0.4; metalness: 0.35"></a-box>
-    <a-box position="-6.5 0  1.5" width="3.0" height="0.15" depth="1.8" rotation="0  12 5"
-           material="color: #808e88; roughness: 0.4; metalness: 0.35"></a-box>
-    <a-box position="8.4 0 0" width="0.35" height="0.35" depth="0.35" color="#2a2820"></a-box>
-  </a-entity>
-  <!-- Cable 3 — long run down to east side of street -->
-  <a-box position="21 32 -33" width="0.05" height="66" depth="0.05"
-         color="#383630" rotation="0 0 -15"></a-box>
-
-  <!-- ═══ GROUND ═══
-       Full 30 m cobbled floor — no gaps.
-       Street texture, high repeat for fine cobble detail.
-  -->
-  <a-plane position="0 0.001 -15" rotation="-90 0 0" width="4.0" height="30"
-    material="src: #road-diff; normalMap: #road-norm; normalScale: 1.5 1.5; roughnessMap: #road-rough;
-              repeat: 3 20; roughness: 0.72; metalness: 0.04">
-  </a-plane>
-  <!-- Side alley ground -->
-  <a-plane position="6 0.001 -25" rotation="-90 0 0" width="8" height="10"
-    material="src: #road-diff; normalMap: #road-norm; normalScale: 1.5 1.5; roughnessMap: #road-rough;
-              repeat: 4 8; roughness: 0.94; metalness: 0">
-  </a-plane>
-  <!-- Pub step / forecourt -->
-  <a-box position="0 0.07 -29.55" width="2.0" height="0.14" depth="0.6" color="#787068"></a-box>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       WEST WALL — intact Victorian terrace, 12 m tall
-       Face at X = -2.0   Thickness 0.35 m   Centre at X = -2.175
-
-       Dog-leg: Seg 1 Z= 0 to -12   face X=-2.0
-                Seg 2 Z=-12 to -22  face X=-1.75  (alley 0.25 m wider)
-                Seg 3 Z=-22 to -30  face X=-2.0
-
-       Brick repeat rule: roughly depth×2.4 horiz, height×3.2 vert
-       (this gives bricks ~23 cm wide × 7 cm tall in world space)
-  ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Seg 1 -->
-  <a-box position="-2.175 6 -6" width="0.35" height="12" depth="12"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 29 38; roughness: 0.85; metalness: 0; color: #6b4a2a;
-              emissive: #0c0804; emissiveIntensity: 0.12">
-  </a-box>
-
-  <!-- Dog-leg fill at Z=-12 -->
-  <a-box position="-2.05 6 -12" width="0.6" height="12" depth="0.4"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 1 38; roughness: 0.85; metalness: 0; color: #6b4a2a;
-              emissive: #0c0804; emissiveIntensity: 0.12">
-  </a-box>
-
-  <!-- Seg 2 (face X=-1.75) -->
-  <a-box position="-1.925 6 -17" width="0.35" height="12" depth="10"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 24 38; roughness: 0.85; metalness: 0; color: #6b4a2a;
-              emissive: #0c0804; emissiveIntensity: 0.12">
-  </a-box>
-
-  <!-- Dog-leg fill at Z=-22 -->
-  <a-box position="-2.05 6 -22" width="0.6" height="12" depth="0.4"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 1 38; roughness: 0.85; metalness: 0; color: #6b4a2a;
-              emissive: #0c0804; emissiveIntensity: 0.12">
-  </a-box>
-
-  <!-- Seg 3 -->
-  <a-box position="-2.175 6 -26" width="0.35" height="12" depth="8"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 19 38; roughness: 0.85; metalness: 0; color: #6b4a2a;
-              emissive: #0c0804; emissiveIntensity: 0.12">
-  </a-box>
-
-  <!-- ═══ WEST STRING COURSES — stone bands between floors ═══
-       Floor 1→2 at Y=3.6, floor 2→3 at Y=6.5 (slightly proud of brick face)
-  -->
-  <a-box position="-2.01 3.6 -15" width="0.07" height="0.16" depth="30.5" color="#6a5840"></a-box>
-  <a-box position="-2.01 6.5 -15" width="0.07" height="0.12" depth="30.5" color="#6a5840"></a-box>
-
-  <!-- West parapet -->
-  <a-box position="-2.175 12.3 -15" width="0.65" height="0.6" depth="30.5" color="#3a2818"></a-box>
-  <!-- Chimney 1 -->
-  <a-box position="-2.05 13.8 -8"  width="0.7" height="2.8" depth="0.7"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough;
-              repeat: 2 9; roughness: 0.85; metalness: 0; color: #5a3c20">
-  </a-box>
-  <a-box position="-2.05 15.3 -8"  width="0.55" height="0.15" depth="0.55" color="#2a1e10"></a-box>
-  <!-- Chimney 2 -->
-  <a-box position="-2.05 13.5 -20" width="0.7" height="2.2" depth="0.7"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough;
-              repeat: 2 7; roughness: 0.85; metalness: 0; color: #5a3c20">
-  </a-box>
-  <a-box position="-2.05 14.65 -20" width="0.55" height="0.15" depth="0.55" color="#2a1e10"></a-box>
-
-  <!-- ═══ WEST WINDOWS ═══
-       Frame protrudes slightly from face (X = -2.0)
-       Glass sits just inside frame.
-       Blast tape X pattern on all.
-  -->
-  <!-- Ground floor Z=-4 -->
-  <a-box position="-2.03 1.9 -4"   width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="-2.01 1.9 -4"   width="0.05" height="1.7" depth="0.88"
-         material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-2.02 1.9 -4"   rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-  <a-box position="-2.02 1.9 -4"   rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-
-  <!-- Ground floor Z=-9 -->
-  <a-box position="-2.03 1.9 -9"   width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="-2.01 1.9 -9"   width="0.05" height="1.7" depth="0.88"
-         material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-2.02 1.9 -9"   rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-  <a-box position="-2.02 1.9 -9"   rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-
-  <!-- First floor Z=-7 — AMBER LIT (curtain slipping) -->
-  <a-box position="-2.03 4.9 -7"   width="0.09" height="1.7" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="-2.01 4.9 -7"   width="0.05" height="1.5" depth="0.88"
-         material="transparent: true; opacity: 0.92; color: #3a1e00;
-                   emissive: #241200; emissiveIntensity: 1.6; roughness: 0.2; metalness: 0"></a-box>
-  <!-- Glazing bar -->
-  <a-box position="-2.02 4.9 -7"   width="0.06" height="1.5" depth="0.05" color="#1a1008"></a-box>
-
-  <!-- Seg 2 ground floor Z=-15 -->
-  <a-box position="-1.78 1.9 -15"  width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="-1.76 1.9 -15"  width="0.05" height="1.7" depth="0.88"
-         material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-1.77 1.9 -15"  rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-  <a-box position="-1.77 1.9 -15"  rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-
-  <!-- Seg 2 first floor Z=-17 -->
-  <a-box position="-1.78 4.9 -17"  width="0.09" height="1.7" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="-1.76 4.9 -17"  width="0.05" height="1.5" depth="0.88"
-         material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-1.77 4.9 -17"  rotation="30 0 0"  width="0.02" height="1.74" depth="0.03" color="#c4a030"></a-box>
-  <a-box position="-1.77 4.9 -17"  rotation="-30 0 0" width="0.02" height="1.74" depth="0.03" color="#c4a030"></a-box>
-
-  <!-- Seg 3 ground floor Z=-25 -->
-  <a-box position="-2.03 1.9 -25"  width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="-2.01 1.9 -25"  width="0.05" height="1.7" depth="0.88"
-         material="transparent: true; opacity: 0.95; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-2.02 1.9 -25"  rotation="27 0 0"  width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-  <a-box position="-2.02 1.9 -25"  rotation="-27 0 0" width="0.02" height="1.91" depth="0.03" color="#c4a030"></a-box>
-
-  <!-- ═══ WINDOW SILLS — west wall ═══
-       Windows: ground floor Y=1.9 h=1.9 → bottom Y=0.95 → sill Y=0.88
-                first floor  Y=4.9 h=1.7 → bottom Y=4.05 → sill Y=3.98
-  -->
-  <a-box position="-2.02 0.88 -4"  width="0.15" height="0.08" depth="1.2"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
-  </a-box>
-  <a-box position="-2.02 0.88 -9"  width="0.15" height="0.08" depth="1.2"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
-  </a-box>
-  <a-box position="-2.02 3.98 -7"  width="0.15" height="0.08" depth="1.12"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.1 0.1; roughness: 0.88; metalness: 0">
-  </a-box>
-  <!-- Seg 2 sills -->
-  <a-box position="-1.79 0.88 -15" width="0.15" height="0.08" depth="1.2"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
-  </a-box>
-  <a-box position="-1.79 3.98 -17" width="0.15" height="0.08" depth="1.12"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.1 0.1; roughness: 0.88; metalness: 0">
-  </a-box>
-  <!-- Seg 3 sill -->
-  <a-box position="-2.02 0.88 -25" width="0.15" height="0.08" depth="1.2"
-    material="src: #stone-diff; roughnessMap: #stone-rough; repeat: 1.2 0.1; roughness: 0.88; metalness: 0">
-  </a-box>
-
-  <!-- ═══ STONE BASE PLINTH — west wall ═══
-       0.3 m tall stone plinth at ground level, slightly proud of brick face.
-       Keeps damp off brickwork — very typical Victorian.
-  -->
-  <a-box position="-2.01 0.15 -6"   width="0.05" height="0.3" depth="12"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 12 0.3; roughness: 0.9; metalness: 0">
-  </a-box>
-  <a-box position="-1.76 0.15 -17"  width="0.05" height="0.3" depth="10"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 10 0.3; roughness: 0.9; metalness: 0">
-  </a-box>
-  <a-box position="-2.01 0.15 -26"  width="0.05" height="0.3" depth="8"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 8 0.3; roughness: 0.9; metalness: 0">
-  </a-box>
-
-  <!-- ═══ DRAINPIPES — west wall ═══
-       Cast iron, Victorian. Run from gutter (12 m) to ground.
-       Circular-ish (box stand-in), 0.08 m sq, dark iron.
-  -->
-  <a-box position="-1.995 6 -3"  width="0.08" height="12" depth="0.08" color="#252018"></a-box>
-  <a-box position="-1.995 6 -11" width="0.08" height="12" depth="0.08" color="#252018"></a-box>
-  <a-box position="-1.745 6 -19" width="0.08" height="12" depth="0.08" color="#252018"></a-box>
-  <a-box position="-1.995 6 -27" width="0.08" height="12" depth="0.08" color="#252018"></a-box>
-  <!-- Pipe shoes (small bracket boxes at ground) -->
-  <a-box position="-1.98 0.2 -3"  width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
-  <a-box position="-1.98 0.2 -11" width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
-  <a-box position="-1.73 0.2 -19" width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
-  <a-box position="-1.98 0.2 -27" width="0.14" height="0.12" depth="0.14" color="#1e1a12"></a-box>
-
-  <!-- ═══ WEST DOOR (ground floor recess, Z=-12) ═══ -->
-  <a-box position="-2.03 1.1 -12.5" width="0.09" height="2.3" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="-2.00 1.05 -12.5" width="0.06" height="2.0" depth="0.9" color="#241a0c"></a-box>
-  <a-box position="-1.97 1.3  -12.5" width="0.04" height="0.6" depth="0.68" color="#1c1408"></a-box>
-  <a-box position="-1.97 0.45 -12.5" width="0.04" height="0.45" depth="0.68" color="#1c1408"></a-box>
-
-  <!-- ═══ STREET LAMPS — Victorian gas lamps (GLB model) ═══ -->
-  <!-- Lamp 1: near dog-leg at Z=-10, west side -->
-  <a-entity gltf-model="#lamp-glb" position="-1.7 0 -10" rotation="0 0 0" scale="1 1 1"></a-entity>
-  <!-- Lamp 2: far section Z=-22, west side -->
-  <a-entity gltf-model="#lamp-glb" position="-1.7 0 -22" rotation="0 0 0" scale="1 1 1"></a-entity>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       EAST WALL — bomb damaged
-       Seg 1: Z=0  to -10   full 12 m
-       Seg 2: Z=-10 to -16  8 m tall, ragged
-       Seg 3: Z=-16 to -20  3.5 m, rubble wall
-       Z=-20 onward: OPEN → side alley / fire visible
-  ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Seg 1 (intact) -->
-  <a-box position="2.175 6 -5" width="0.35" height="12" depth="10"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 24 38; roughness: 0.85; metalness: 0; color: #5a3c20">
-  </a-box>
-  <a-box position="2.175 12.3 -5" width="0.55" height="0.6" depth="10.5" color="#3a2818"></a-box>
-
-  <!-- Seg 2 (damaged, 8 m) -->
-  <a-box position="2.175 4 -13" width="0.35" height="8" depth="6"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 14 25; roughness: 0.9; metalness: 0; color: #4a3018">
-  </a-box>
-  <!-- Ragged upper remnants -->
-  <a-box position="2.175 9.5 -11" width="0.35" height="3" depth="3"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 7 10; roughness: 0.9; metalness: 0; color: #3a2510">
-  </a-box>
-  <a-box position="2.175 8.2 -15" width="0.35" height="1.8" depth="2"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 5 6; roughness: 0.9; metalness: 0; color: #3a2510">
-  </a-box>
-
-  <!-- Seg 3 (heavy damage — low rubble wall 3.5 m) -->
-  <a-box position="2.175 1.75 -18" width="0.35" height="3.5" depth="4"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 10 11; roughness: 0.95; metalness: 0; color: #3a2510">
-  </a-box>
-  <!-- Jagged top piece -->
-  <a-box position="2.175 3.4 -16.5" width="0.35" height="1.2" depth="1.8"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 4 4; roughness: 0.95; metalness: 0; color: #2e1e0a">
-  </a-box>
-
-  <!-- ═══ BURNT BUILDING INTERIOR — visible above damaged east wall ═══
-       Back wall of ruined building sits ~3 m east of alley wall.
-       First-floor slab and charred joists suggest internal collapse.
-  -->
-  <a-box position="5 4 -15" width="0.35" height="8" depth="10"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 24 25; roughness: 0.9; metalness: 0; color: #18100a">
-  </a-box>
-  <!-- Ragged top of back wall -->
-  <a-box position="4.5 7.5 -12" width="0.35" height="3" depth="3" color="#0e0a06"></a-box>
-  <!-- Exposed first-floor concrete slab — slightly angled as if sagging -->
-  <a-box position="3.5 3.0 -14" width="2.5" height="0.15" depth="7" rotation="0 0 3" color="#1c1a16"></a-box>
-  <!-- Charred floor joists hanging below slab -->
-  <a-box position="3.2 2.9 -12.5" width="0.08" height="0.1" depth="4" rotation="0 5 0" color="#0e0c08"></a-box>
-  <a-box position="3.7 2.86 -14.5" width="0.08" height="0.1" depth="5" rotation="0 -4 0" color="#100e08"></a-box>
-  <!-- Scorch/soot on back wall -->
-  <a-box position="5 5 -15" width="0.33" height="6" depth="8"
-         material="transparent: true; opacity: 0.55; color: #020100; roughness: 1; metalness: 0">
-  </a-box>
-
-  <!-- ═══ EAST WINDOWS ═══ -->
-  <!-- Ground floor door Z=-3 (shop / dwelling entry) -->
-  <a-box position="2.03 1.1 -3"   width="0.09" height="2.3" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="2.01 1.05 -3"  width="0.05" height="2.0" depth="0.9"  color="#160e06"></a-box>
-  <a-box position="2.08 1.0 -3"   width="0.05" height="2.0" depth="0.88" color="#2a1e0c"></a-box>
-  <!-- Door rail and panel -->
-  <a-box position="2.09 1.3 -3"   width="0.06" height="0.6" depth="0.68" color="#1c1408"></a-box>
-  <a-box position="2.09 0.45 -3"  width="0.06" height="0.45" depth="0.68" color="#1c1408"></a-box>
-
-  <!-- Blown-out ground floor Z=-4 -->
-  <a-box position="2.03 1.9 -4" width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="2.01 1.9 -4" width="0.04" height="1.7" depth="0.88" color="#050402"></a-box>
-
-  <!-- First floor window Z=-2 — dark interior, intact -->
-  <a-box position="2.03 4.9 -2"   width="0.09" height="1.7" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="2.01 4.9 -2"   width="0.04" height="1.5" depth="0.88" color="#020302"></a-box>
-
-  <!-- Boarded Z=-8 -->
-  <a-box position="2.03 1.9 -8" width="0.09" height="1.9" depth="1.05" color="#1a1008"></a-box>
-  <a-box position="2.08 2.2 -8" width="0.05" height="0.14" depth="0.88" color="#3a2810"></a-box>
-  <a-box position="2.08 1.8 -8" width="0.05" height="0.14" depth="0.88" color="#2c200a"></a-box>
-  <a-box position="2.08 1.4 -8" width="0.05" height="0.14" depth="0.88" color="#3a2810"></a-box>
-  <a-box position="2.08 1.0 -8" width="0.05" height="0.14" depth="0.88" color="#2c200a"></a-box>
-
-  <!-- Blown-out upper Z=-6 -->
-  <a-box position="2.03 4.9 -6" width="0.09" height="1.7" depth="1.05" color="#0d0806"></a-box>
-  <a-box position="2.01 4.9 -6" width="0.04" height="1.5" depth="0.88" color="#040302"></a-box>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       ENTRANCE ARCH — south wall + Oxford Arms-style arch over alley
-       Arch spans 4 m wide, 3.2 m tall inside clearance.
-       Built as: left jamb | right jamb | flat soffit | outer arch moulding
-       "BLACKOUT ALLEY" painted on the soffit face.
-  ════════════════════════════════════════════════════════════════ -->
-  <!-- South wall behind arch -->
-  <a-box position="0 6 0.2" width="5" height="12" depth="0.35" color="#1a1208"></a-box>
-
-  <!-- Left jamb (X=-2.0 to X=-1.6) -->
-  <a-box position="-1.8 1.6 -0.2" width="0.4" height="3.2" depth="0.6"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 0.4 3.2; roughness: 0.88; metalness: 0">
-  </a-box>
-  <!-- Right jamb (X=+1.6 to X=+2.0) -->
-  <a-box position=" 1.8 1.6 -0.2" width="0.4" height="3.2" depth="0.6"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 0.4 3.2; roughness: 0.88; metalness: 0">
-  </a-box>
-
-  <!-- Flat soffit / lintel (spans opening, sits on jambs) -->
-  <a-box position="0 3.35 -0.2" width="3.6" height="0.3" depth="0.6"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 3.6 0.3; roughness: 0.88; metalness: 0">
-  </a-box>
-
-  <!-- Arch moulding on top of lintel — decorative raised band -->
-  <a-box position="0 3.7 -0.18" width="4.1" height="0.22" depth="0.58" color="#c8a870"></a-box>
-
-  <!-- Arch keystone centre (slightly proud) -->
-  <a-box position="0 3.52 -0.16" width="0.38" height="0.42" depth="0.65" color="#d4b880"></a-box>
-
-  <!-- "BLACKOUT ALLEY" painted on soffit face -->
-  <a-text value="BLACKOUT ALLEY" position="0 3.42 -0.0"
-          color="#a07810" width="4.8" align="center" letter-spacing="3"></a-text>
-
-  <!-- Wall mass above arch, left and right of opening -->
-  <a-box position="-2.175 7.5 -0.2" width="0.35" height="9" depth="0.6" color="#3a2818"></a-box>
-  <a-box position=" 2.175 7.5 -0.2" width="0.35" height="9" depth="0.6" color="#3a2818"></a-box>
-  <!-- Brick spandrel above arch -->
-  <a-box position="0 5.5 -0.2" width="3.6" height="4.0" depth="0.6"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough;
-              repeat: 9 13; roughness: 0.85; metalness: 0; color: #5a3c20">
-  </a-box>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       PROPS
-  ════════════════════════════════════════════════════════════════ -->
-  <!-- Sandbags by door -->
-  <a-entity gltf-model="#sandbag-glb" position="-1.3 0 -13.2" rotation="0 85 0" scale="1 1 1"></a-entity>
-
-  <!-- Barrel — scaled to realistic pub barrel size (~0.55 m diam, ~0.9 m tall)
-       If native GLB is ~3 m, scale 0.28 gives ~0.84 m tall. Adjust if needed. -->
-
-  <!-- Rubble on damaged east side -->
-  <!-- rubble GLB removed — scale TBD -->
-
-  <!-- ARP signs removed -->
-
-  <!-- Reference box removed — scale confirmed correct -->
-
-  <!-- ═══ RAIN PUDDLES ═══
-       High metalness + low roughness = mirror-like surface.
-       Emissive tinted to local light (amber near fire/lamps, cool near entrance).
-       Opacity animation simulates ripples from falling rain.
-  -->
-  <!-- Entrance area — cool blue-grey sky reflection -->
-  <a-plane position="-0.5 0.006 -5" rotation="-90 0 18" width="0.85" height="0.42"
-    material="color: #181e2c; metalness: 0.88; roughness: 0.07; opacity: 0.78; transparent: true;
-              emissive: #080606; emissiveIntensity: 0.1"
-    animation="property: material.opacity; from: 0.78; to: 0.62; dur: 4200; dir: alternate; loop: true; easing: easeInOutSine">
-  </a-plane>
-
-  <!-- Mid-alley, beneath drainpipe — large puddle -->
-  <a-plane position="0.7 0.006 -13" rotation="-90 0 -7" width="1.3" height="0.58"
-    material="color: #141820; metalness: 0.90; roughness: 0.05; opacity: 0.84; transparent: true;
-              emissive: #1a0900; emissiveIntensity: 0.28"
-    animation="property: material.opacity; from: 0.84; to: 0.68; dur: 3700; dir: alternate; loop: true; easing: easeInOutSine">
-  </a-plane>
-
-  <!-- At side alley junction — catches fire glow strongly -->
-  <a-plane position="-0.4 0.006 -20" rotation="-90 0 11" width="0.9" height="0.44"
-    material="color: #1e1208; metalness: 0.88; roughness: 0.06; opacity: 0.82; transparent: true;
-              emissive: #2e1200; emissiveIntensity: 0.48"
-    animation="property: material.opacity; from: 0.82; to: 0.65; dur: 5200; dir: alternate; loop: true; easing: easeInOutSine">
-  </a-plane>
-
-  <!-- Near second lamp Z=-22 — amber glow from above -->
-  <a-plane position="0.6 0.006 -24" rotation="-90 0 -4" width="1.1" height="0.5"
-    material="color: #1c1206; metalness: 0.90; roughness: 0.05; opacity: 0.86; transparent: true;
-              emissive: #321600; emissiveIntensity: 0.42"
-    animation="property: material.opacity; from: 0.86; to: 0.70; dur: 3900; dir: alternate; loop: true; easing: easeInOutSine">
-  </a-plane>
-
-  <!-- Pub forecourt — warm amber, strongest fire reflection -->
-  <a-plane position="-0.6 0.006 -28" rotation="-90 0 6" width="0.72" height="0.38"
-    material="color: #221408; metalness: 0.92; roughness: 0.04; opacity: 0.85; transparent: true;
-              emissive: #3c1c00; emissiveIntensity: 0.58"
-    animation="property: material.opacity; from: 0.85; to: 0.68; dur: 4600; dir: alternate; loop: true; easing: easeInOutSine">
-  </a-plane>
-
-
-  <!-- ═══ SMOKE WISPS — rising from damaged east wall area ═══ -->
-  <a-plane position="1.5 0 -16" rotation="-15 20 0" width="1.8" height="1.2"
-           material="transparent: true; opacity: 0.07; color: #302820; roughness: 1; metalness: 0; side: double"
-           smoke-drift="speed: 0.25; range: 7; startY: 1">
-  </a-plane>
-  <a-plane position="1.2 0 -19" rotation="-10 -15 0" width="1.4" height="1.0"
-           material="transparent: true; opacity: 0.06; color: #282018; roughness: 1; metalness: 0; side: double"
-           smoke-drift="speed: 0.18; range: 6; startY: 2">
-  </a-plane>
-  <a-plane position="0.5 0 -25" rotation="-8 30 0" width="2.2" height="1.4"
-           material="transparent: true; opacity: 0.05; color: #201810; roughness: 1; metalness: 0; side: double"
-           smoke-drift="speed: 0.3; range: 8; startY: 0.5">
-  </a-plane>
-
-  <!-- ═══ GROUND DEBRIS — brick chips, plaster, scattered near east damage ═══ -->
-  <a-box position="1.5 0.04 -13.5" width="0.35" height="0.08" depth="0.22" rotation="0 22 0" color="#3a2510"></a-box>
-  <a-box position="1.8 0.04 -14.2" width="0.18" height="0.06" depth="0.14" rotation="0 -40 0" color="#2e1e0a"></a-box>
-  <a-box position="1.3 0.04 -15.8" width="0.28" height="0.06" depth="0.20" rotation="0 70 0" color="#4a3018"></a-box>
-  <a-box position="1.6 0.04 -17.0" width="0.22" height="0.05" depth="0.18" rotation="0 -15 0" color="#3a2510"></a-box>
-  <a-box position="1.1 0.04 -18.5" width="0.32" height="0.07" depth="0.16" rotation="0 55 0" color="#2e1e0a"></a-box>
-  <a-box position="0.8 0.04 -17.5" width="0.14" height="0.05" depth="0.12" rotation="0 80 0" color="#4a3018"></a-box>
-  <a-box position="1.7 0.04 -19.8" width="0.24" height="0.06" depth="0.20" rotation="0 -60 0" color="#3a2510"></a-box>
-  <a-box position="0.5 0.04 -21.0" width="0.18" height="0.05" depth="0.14" rotation="0 33 0" color="#2e1e0a"></a-box>
-  <!-- A few chunks spilled into alley centre -->
-  <a-box position="0.3 0.04 -16.5" width="0.20" height="0.06" depth="0.16" rotation="0 -25 0" color="#4a3018"></a-box>
-  <a-box position="-0.2 0.04 -20.3" width="0.15" height="0.05" depth="0.12" rotation="0 50 0" color="#3a2510"></a-box>
-
-  <!-- ═══ SCORCH MARKS — dark overlay on east wall at damage zones ═══ -->
-  <a-box position="2.17 5 -13" width="0.33" height="6" depth="6"
-         material="transparent: true; opacity: 0.45; color: #060402; roughness: 1; metalness: 0">
-  </a-box>
-  <a-box position="2.17 2 -18" width="0.33" height="4" depth="4"
-         material="transparent: true; opacity: 0.55; color: #040302; roughness: 1; metalness: 0">
-  </a-box>
-
-  <!-- ═══ IRON GATE AT ENTRANCE — partially blown off hinges (Blitz damage) ═══
-       Left gate leaf hangs normally. Right leaf blasted open/bent outward.
-  -->
-  <!-- Gate frame top bar -->
-  <a-box position="0 3.1 -0.55" width="3.6" height="0.07" depth="0.06" color="#1e1c14"></a-box>
-  <!-- Gate frame bottom rail -->
-  <a-box position="0 0.45 -0.55" width="3.6" height="0.07" depth="0.06" color="#1e1c14"></a-box>
-  <!-- Left gate leaf — 6 vertical bars, closed -->
-  <a-box position="-1.35 1.7 -0.55" width="0.06" height="2.6" depth="0.06" color="#1e1c14"></a-box>
-  <a-box position="-1.05 1.7 -0.55" width="0.06" height="2.6" depth="0.06" color="#1e1c14"></a-box>
-  <a-box position="-0.75 1.7 -0.55" width="0.06" height="2.6" depth="0.06" color="#1e1c14"></a-box>
-  <a-box position="-1.20 1.7 -0.55" width="1.3" height="0.06" depth="0.06" color="#1e1c14"></a-box>
-  <!-- Left gate spear tips -->
-  <a-box position="-1.35 3.18 -0.55" width="0.05" height="0.18" depth="0.05" rotation="0 0 0" color="#2a2820"></a-box>
-  <a-box position="-1.05 3.18 -0.55" width="0.05" height="0.18" depth="0.05" color="#2a2820"></a-box>
-  <a-box position="-0.75 3.18 -0.55" width="0.05" height="0.18" depth="0.05" color="#2a2820"></a-box>
-  <!-- Right gate leaf — blasted open, rotated out toward viewer -->
-  <a-entity position="0.2 0 -0.55" rotation="0 55 0">
-    <a-box position="0.55 1.7 0" width="0.06" height="2.6" depth="0.06" color="#1e1c14"></a-box>
-    <a-box position="0.85 1.7 0" width="0.06" height="2.6" depth="0.06" color="#1e1c14"></a-box>
-    <a-box position="1.15 1.7 0" width="0.06" height="2.6" depth="0.06" color="#1e1c14"></a-box>
-    <a-box position="0.85 1.7 0" width="1.3" height="0.06" depth="0.06" color="#1e1c14"></a-box>
-  </a-entity>
-
-  <!-- ═══ SKY GLOW — distant fires on horizon above rooftops ═══ -->
-  <!-- Orange horizon band behind pub / to east -->
-  <a-box position="8 18 -50" width="35" height="10" depth="0.5"
-         material="emissive: #cc2200; emissiveIntensity: 0.18; color: #cc2200;
-                   transparent: true; opacity: 0.12">
-  </a-box>
-  <!-- Softer wider glow -->
-  <a-box position="5 22 -50" width="50" height="14" depth="0.5"
-         material="emissive: #882200; emissiveIntensity: 0.12; color: #882200;
-                   transparent: true; opacity: 0.08">
-  </a-box>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       THE ROYAL OAK — pub end wall
-       Face at Z = -30.0  (outer face, visible to player)
-       Width 5 m, centred X=0
-       Layer 1: pub tile (green) 0–1.2 m
-       Layer 2: dark painted render 1.2–4.0 m  (sign board here)
-       Layer 3: brick 4–10 m
-       Layer 4: stone cornice 10–10.5 m
-  ════════════════════════════════════════════════════════════════ -->
-
-  <!-- Green tile base 0–1.2 m -->
-  <a-box position="0 0.6 -30.175" width="5.0" height="1.2" depth="0.35"
-    material="src: #pub-diff; normalMap: #pub-norm; roughnessMap: #pub-rough;
-              color: #2a5010; repeat: 22 5; roughness: 0.12; metalness: 0.1">
-  </a-box>
-
-  <!-- Dark painted render 1.2–4.0 m -->
-  <a-box position="0 2.6 -30.175" width="5.0" height="2.8" depth="0.35" color="#181811"></a-box>
-
-  <!-- Sandstone pilasters framing the door -->
-  <a-box position="-0.85 2.6 -30.0" width="0.2" height="2.8" depth="0.07"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 0.2 2.8; roughness: 0.88; metalness: 0">
-  </a-box>
-  <a-box position=" 0.85 2.6 -30.0" width="0.2" height="2.8" depth="0.07"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 0.2 2.8; roughness: 0.88; metalness: 0">
-  </a-box>
-
-  <!-- Brick 4–10 m -->
-  <a-box position="0 7.0 -30.175" width="5.0" height="6.0" depth="0.35"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 22 19; roughness: 0.85; metalness: 0">
-  </a-box>
-
-  <!-- Stone cornice 10–10.5 m -->
-  <a-box position="0 10.25 -30.05" width="5.6" height="0.5" depth="0.6"
-    material="src: #stone-diff; aoMap: #stone-ao; roughnessMap: #stone-rough;
-              repeat: 5 0.3; roughness: 0.85; metalness: 0">
-  </a-box>
-
-  <!-- ── PUB SIGN BOARD ──
-       Dark painted wood board with gold text.
-       Three layers: gold outer border / dark board / text.
-  -->
-  <a-box position="0 2.85 -29.82" width="3.7" height="0.88" depth="0.14" color="#6a4c0e"></a-box>
-  <a-box position="0 2.85 -29.76" width="3.42" height="0.65" depth="0.09" color="#0c140a"></a-box>
-  <a-text value="THE ROYAL OAK" position="0 2.93 -29.68"
-          color="#d4a828" width="4.2" align="center" letter-spacing="1"></a-text>
-  <a-text value="EST. 1887  ·  ALES &amp; STOUT" position="0 2.68 -29.68"
-          color="#987018" width="2.7" align="center"></a-text>
-
-  <!-- ── Pub upper floor windows (south-facing, short depth) ── -->
-  <!-- First floor west -->
-  <a-box position="-1.6 5.0 -29.97" width="1.05" height="1.7" depth="0.10" color="#1a1008"></a-box>
-  <a-box position="-1.6 5.0 -29.93" width="0.88" height="1.5" depth="0.06"
-         material="transparent: true; opacity: 0.93; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position="-1.6 5.0 -29.91" rotation="0 0 45"  width="0.06" height="1.5" depth="0.04" color="#c4a030"></a-box>
-  <a-box position="-1.6 5.0 -29.91" rotation="0 0 -45" width="0.06" height="1.5" depth="0.04" color="#c4a030"></a-box>
-  <!-- First floor east -->
-  <a-box position=" 1.6 5.0 -29.97" width="1.05" height="1.7" depth="0.10" color="#1a1008"></a-box>
-  <a-box position=" 1.6 5.0 -29.93" width="0.88" height="1.5" depth="0.06"
-         material="transparent: true; opacity: 0.93; color: #020302; roughness: 0.2; metalness: 0.1"></a-box>
-  <a-box position=" 1.6 5.0 -29.91" rotation="0 0 45"  width="0.06" height="1.5" depth="0.04" color="#c4a030"></a-box>
-  <a-box position=" 1.6 5.0 -29.91" rotation="0 0 -45" width="0.06" height="1.5" depth="0.04" color="#c4a030"></a-box>
-
-  <!-- ── Amber light seeping under pub door — imperfect blackout curtain ── -->
-  <a-plane position="0 0.003 -29.65" rotation="-90 0 0" width="1.0" height="0.18"
-    material="color: #ff8800; emissive: #cc5500; emissiveIntensity: 0.7; opacity: 0.22; transparent: true">
-  </a-plane>
-
-  <!-- ── Pub doors ── -->
-  <a-entity gltf-model="#pubdoors-glb" position="0 0 -29.85" rotation="0 180 0" scale="0.7 0.7 0.7"></a-entity>
-
-  <!-- ── WARTIME POSTER — west wall seg 2 near Z=-20 ──
-       Propaganda poster, partly ripped/water-damaged.
-       "CARELESS TALK COSTS LIVES" — genuine WWII slogan.
-  -->
-  <a-box position="-1.96 2.3 -20.5" width="0.03" height="1.05" depth="0.55"
-         material="color: #c0a850; emissive: #080600; emissiveIntensity: 0.08; roughness: 0.95; metalness: 0">
-  </a-box>
-  <!-- Red band at top -->
-  <a-box position="-1.93 2.75 -20.5" width="0.02" height="0.22" depth="0.52"
-         color="#761810">
-  </a-box>
-  <!-- Dark tear strip — poster partly ripped -->
-  <a-box position="-1.93 1.88 -20.7" width="0.02" height="0.32" depth="0.15" rotation="0 0 8"
-         color="#1a1206">
-  </a-box>
-  <a-text value="CARELESS TALK&#10;COSTS LIVES"
-          position="-1.91 2.35 -20.5" rotation="0 90 0"
-          color="#2a1e08" width="1.1" align="center"></a-text>
-
-  <!-- ── HANGING PUB SIGN — bracket on west side of pub facade ──
-       Iron bracket projects from face. Sign hangs, readable from alley.
-  -->
-  <a-box position="-1.8 4.9 -29.55" width="0.07" height="0.07" depth="0.8" color="#252018"></a-box>
-  <a-box position="-1.8 4.55 -29.2" width="0.07" height="0.72" depth="0.07" color="#252018"></a-box>
-  <a-box position="-1.74 3.95 -29.2" width="0.07" height="0.85" depth="0.55" color="#0c1208"></a-box>
-  <a-box position="-1.71 3.95 -29.2" width="0.04" height="0.72" depth="0.45" color="#4a3808"></a-box>
-  <a-text value="ROYAL&#10;OAK" position="-1.69 3.95 -29.2"
-          rotation="0 -90 0" color="#d4a828" width="1.1" align="center"></a-text>
-
-  <!-- ── KERB STONES — cobble edge at base of walls ── -->
-  <a-box position="-1.93 0.04 -15" width="0.14" height="0.08" depth="30" color="#383530"></a-box>
-  <a-box position=" 1.93 0.04 -10" width="0.14" height="0.08" depth="20" color="#383530"></a-box>
-
-  <!-- ── CONTACT SHADOW — dark strip where walls meet floor ──
-       Simulates ambient occlusion in the corners.
-  -->
-  <a-box position="-2.02 0.018 -15" width="0.08" height="0.036" depth="30"
-         material="transparent: true; opacity: 0.7; color: #020100; roughness: 1; metalness: 0">
-  </a-box>
-  <a-box position=" 2.02 0.018 -10" width="0.08" height="0.036" depth="20"
-         material="transparent: true; opacity: 0.7; color: #020100; roughness: 1; metalness: 0">
-  </a-box>
-  <!-- AO at pub end wall base -->
-  <a-box position="0 0.018 -30.1" width="5" height="0.036" depth="0.08"
-         material="transparent: true; opacity: 0.7; color: #020100; roughness: 1; metalness: 0">
-  </a-box>
-
-  <!-- ── CENTRAL DRAINAGE GUTTER — Victorian stone channel down alley centre ── -->
-  <a-box position="0 -0.004 -15" width="0.2" height="0.06" depth="30" color="#151210"></a-box>
-
-  <!-- ── WATER STAINS — dark streaks below drainpipes ── -->
-  <a-box position="-1.99 0.9 -3"  width="0.025" height="1.8" depth="0.12"
-         material="transparent: true; opacity: 0.45; color: #040200; roughness: 1; metalness: 0">
-  </a-box>
-  <a-box position="-1.99 0.9 -11" width="0.025" height="1.8" depth="0.12"
-         material="transparent: true; opacity: 0.38; color: #040200; roughness: 1; metalness: 0">
-  </a-box>
-  <a-box position="-1.74 0.9 -19" width="0.025" height="1.8" depth="0.12"
-         material="transparent: true; opacity: 0.42; color: #040200; roughness: 1; metalness: 0">
-  </a-box>
-  <a-box position="-1.99 0.9 -27" width="0.025" height="1.8" depth="0.12"
-         material="transparent: true; opacity: 0.35; color: #040200; roughness: 1; metalness: 0">
-  </a-box>
-
-  <!-- Pub side walls -->
-  <a-box position="-2.175 5 -33" width="0.35" height="10" depth="6"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 14 31; roughness: 0.85; metalness: 0; color: #6b4a2a">
-  </a-box>
-  <a-box position=" 2.175 5 -33" width="0.35" height="10" depth="6"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 14 31; roughness: 0.85; metalness: 0; color: #6b4a2a">
-  </a-box>
-  <a-box position="0 5 -36.1"   width="5.7" height="10" depth="0.35" color="#181410"></a-box>
-  <a-box position="0 10.3 -33"  width="5.7" height="0.6" depth="6.7" color="#2a2820"></a-box>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       SIDE ALLEY — east from X=+2.0, between Z=-20 and Z=-30
-       Bomb-damaged north wall. Blocked by rubble at X≈8.
-       Fire/glow visible at far end.
-  ════════════════════════════════════════════════════════════════ -->
-
-  <!-- North wall of side alley (Z=-20.175) -->
-  <a-box position="7 5 -20.175" width="10" height="10" depth="0.35"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 24 31; roughness: 0.85; metalness: 0; color: #3a2510">
-  </a-box>
-  <!-- Ragged top on north wall -->
-  <a-box position="5 8.5 -20.1" width="3.5" height="3" depth="0.35"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 8 10; roughness: 0.9; metalness: 0; color: #2e1e0a">
-  </a-box>
-
-  <!-- Rubble blockage across side alley -->
-  <a-box position="8 0.8 -25" width="0.35" height="1.6" depth="10" color="#3a2c1e"></a-box>
-  <a-box position="7.7 0.55 -25" width="3" height="1.1" depth="9"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough;
-              repeat: 7 3; roughness: 0.95; metalness: 0; color: #2e1e0a">
-  </a-box>
-  <!-- Fallen beam -->
-  <a-box position="7.5 1.7 -25" width="0.1" height="0.12" depth="9" rotation="0 0 -22" color="#1a1008"></a-box>
-
-  <!-- Fire glow planes beyond blockage -->
-  <a-box position="10.5 3 -25" width="0.1" height="6" depth="9.5"
-         material="emissive: #ff3300; emissiveIntensity: 0.65; color: #ff3300;
-                   transparent: true; opacity: 0.22"></a-box>
-  <a-box position="10.0 1.5 -25" width="0.1" height="3" depth="6"
-         material="emissive: #ff6600; emissiveIntensity: 0.95; color: #ff6600;
-                   transparent: true; opacity: 0.38"></a-box>
-
-  <!-- Far end cap -->
-  <a-box position="12 5 -25" width="0.35" height="10" depth="10.5" color="#181410"></a-box>
-
-  <!-- ═══ SIDE ALLEY DETAIL — collapsed building visible beyond rubble ═══ -->
-  <!-- Broken back wall of bombed building (beyond rubble blockage) -->
-  <a-box position="10 4 -21" width="4" height="8" depth="0.35"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough; aoMap: #brick-ao;
-              repeat: 10 25; roughness: 0.9; metalness: 0; color: #2e1e0a">
-  </a-box>
-  <!-- Ragged top -->
-  <a-box position="9 7.5 -21" width="2" height="3" depth="0.35"
-         color="#1e1208"></a-box>
-  <!-- Fallen floor slab — angled across debris -->
-  <a-box position="8.5 2.2 -22.5" width="4" height="0.25" depth="2.5" rotation="0 15 -22"
-         color="#2a2420"></a-box>
-  <!-- Exposed floor joists -->
-  <a-box position="8.8 3.6 -22" width="0.1" height="0.12" depth="3" rotation="0 10 0" color="#1a1208"></a-box>
-  <a-box position="9.2 3.4 -22" width="0.1" height="0.12" depth="3" rotation="0 10 0" color="#1a1208"></a-box>
-  <!-- Brick debris pile in side alley -->
-  <a-box position="5 0.25 -21.5" width="1.5" height="0.5" depth="1.2" rotation="0 20 0"
-    material="src: #brick-diff; normalMap: #brick-norm; normalScale: 2 2; roughnessMap: #brick-rough;
-              repeat: 4 1; roughness: 0.95; metalness: 0; color: #3a2510">
-  </a-box>
-  <a-box position="4.5 0.12 -23" width="0.8" height="0.24" depth="0.6" rotation="0 -35 0"
-         color="#2e1e0a"></a-box>
-  <!-- Scorch on side alley wall -->
-  <a-box position="6.5 4 -20.15" width="5" height="5" depth="0.3"
-         material="transparent: true; opacity: 0.5; color: #040302; roughness: 1; metalness: 0">
-  </a-box>
-
-  <!-- ═══════════════════════════════════════════════════════════════
-       VICTORIAN STREET — placed beyond the pub end wall.
-       GLB bounds: X -12→63, Y -6.4→29.4, Z -30→+10.
-       Entity X=-25 centres the model's midpoint (X≈25) on alley X=0.
-       Entity Z=-43 places model front face (Z_model=+10) at world Z=-33,
-       just 3 m beyond the pub face — the alley continues into it.
-       Leave the area empty; user will populate.
-  ════════════════════════════════════════════════════════════════ -->
-  <a-entity
-    gltf-model="url(victorian_street_scene.glb)"
-    position="0 0 -50"
-    rotation="0 0 0"
-    scale="65 65 65"
-    victorian-night
+  <!-- Distant fire glow from the east — amber -->
+  <a-light type="point" color="#ff7722" intensity="0.7" distance="50" decay="1.4"
+           position="20 3 -50" fire-flicker></a-light>
+
+  <!-- ═══ GROUND ═══ -->
+  <a-plane position="0 0 -40" rotation="-90 0 0" width="120" height="120"
+           material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
+
+  <a-sky color="#050810"></a-sky>
+
+  <!-- ═══ BUILDINGS ═══ -->
+  <a-entity gltf-model="#gatehouse-glb"
+    position="-18.447 0 -39.529" rotation="0 0 0" scale="0.333 0.333 0.333"
     ground-clamp>
   </a-entity>
 
-  <!-- ═══ GUNNERSBURY ARCH — scaled to 1/3 (model exports 3× too large) ═══ -->
-  <a-entity
-    gltf-model="#arch-glb"
-    position="22 0 -48"
-    rotation="0 0 0"
-    scale="0.333 0.333 0.333"
+  <a-entity gltf-model="#arch-glb"
+    position="22 0 -48" rotation="0 0 0" scale="0.333 0.333 0.333"
     ground-clamp>
   </a-entity>
 
-  <!-- ═══ ST BARTHOLOMEW'S GATEHOUSE — same source, same 1/3 scale ═══ -->
-  <a-entity
-    gltf-model="#gatehouse-glb"
-    position="-18.447 0 -39.529"
-    rotation="0 0 0"
-    scale="0.333 0.333 0.333"
+  <a-entity gltf-model="#princelet-glb"
+    position="0 0 -65" rotation="0 0 0" scale="0.333 0.333 0.333"
     ground-clamp>
   </a-entity>
 
-  <!-- ═══ 4 PRINCELET STREET ═══ -->
-  <a-entity
-    gltf-model="#princelet-glb"
-    position="0 0 -65"
-    rotation="0 0 0"
-    scale="0.333 0.333 0.333"
-    ground-clamp>
-  </a-entity>
-
-  <!-- Calibration marker sticks are generated by the coord-capture component.
-       Press A (right controller) to show/hide them. -->
-
-  <!-- ═══ PLAYER ═══ -->
-  <a-entity id="rig" position="0 0 -1"
+  <!-- ═══ PLAYER ═══
+       Spawns in front of the gatehouse, looking toward it. -->
+  <a-entity id="rig" position="-18.447 0 -32"
             movement-controls="fly: false; speed: 0.8; camera: #cam">
     <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
+
     <a-entity oculus-touch-controls="hand: left">
-      <!-- X button — top right of face -->
-      <a-text value="X: markers" position="0.032 0.018 -0.052" rotation="-50 0 0"
-              color="#ffee44" width="0.16" align="left"></a-text>
-      <!-- Y button — top left of face -->
-      <a-text value="Y: —" position="-0.012 0.038 -0.052" rotation="-50 0 0"
-              color="#aaaaaa" width="0.16" align="left"></a-text>
-      <!-- Trigger -->
-      <a-text value="trigger: clear" position="0.018 0.008 -0.082" rotation="-20 0 0"
-              color="#ff8888" width="0.16" align="left"></a-text>
-      <!-- Thumbstick -->
-      <a-text value="stick: move" position="-0.01 0.048 -0.032" rotation="-70 0 0"
-              color="#88aaff" width="0.16" align="left"></a-text>
+      <a-text value="X: markers"    position="0.032 0.018 -0.052" rotation="-50 0 0" color="#ffee44" width="0.16" align="left"></a-text>
+      <a-text value="Y: —"          position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#aaaaaa" width="0.16" align="left"></a-text>
+      <a-text value="trigger: clear" position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
+      <a-text value="stick: move"   position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
     </a-entity>
 
     <a-entity oculus-touch-controls="hand: right">
-      <!-- A button — bottom right of face -->
-      <a-text value="A: ref mark" position="0.032 0.008 -0.052" rotation="-50 0 0"
-              color="#ffaa44" width="0.16" align="left"></a-text>
-      <!-- B button — top left of face (dynamic label, updated by fly toggle) -->
-      <a-text class="lbl-b" value="B: fly" position="-0.012 0.038 -0.052" rotation="-50 0 0"
-              color="#88ff88" width="0.16" align="left"></a-text>
-      <!-- Trigger (now unused for capture — moved to thumbstick click) -->
-      <a-text value="stick↓: capture" position="0.018 0.008 -0.082" rotation="-20 0 0"
-              color="#ff8888" width="0.16" align="left"></a-text>
-      <!-- Thumbstick -->
-      <a-text value="stick: move" position="-0.01 0.048 -0.032" rotation="-70 0 0"
-              color="#88aaff" width="0.16" align="left"></a-text>
+      <a-text value="A: ref mark"    position="0.032 0.008 -0.052" rotation="-50 0 0" color="#ffaa44" width="0.16" align="left"></a-text>
+      <a-text class="lbl-b" value="B: fly" position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#88ff88" width="0.16" align="left"></a-text>
+      <a-text value="stick↓: capture" position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
+      <a-text value="stick: move"    position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
     </a-entity>
   </a-entity>
 
