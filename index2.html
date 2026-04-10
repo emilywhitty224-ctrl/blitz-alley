@@ -318,6 +318,116 @@
   </script>
 
   <script>
+    // ── VR PLACER ────────────────────────────────────────────────────────
+    // Right GRIP  : grab nearest building (within 8 m), drag along ground
+    // Right STICK : rotate grabbed building (left/right)
+    // Y button    : dump all building positions to HUD so I can hardcode them
+    AFRAME.registerComponent('vr-placer', {
+      init: function () {
+        var self = this;
+        self.held = null;
+        self.stickX = 0;
+
+        this.el.sceneEl.addEventListener('loaded', function () {
+          var cam      = document.querySelector('#cam');
+          var rigEl    = document.querySelector('#rig');
+          var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+          var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
+
+          // ── Output HUD ──────────────────────────────────────────────
+          var outPanel = document.createElement('a-plane');
+          outPanel.setAttribute('position', '-0.38 0.05 -0.55');
+          outPanel.setAttribute('width',  '0.72');
+          outPanel.setAttribute('height', '0.55');
+          outPanel.setAttribute('material', 'color:#000811; opacity:0.9; transparent:true; shader:flat');
+          outPanel.setAttribute('visible', 'false');
+          cam.appendChild(outPanel);
+
+          var outText = document.createElement('a-entity');
+          outText.setAttribute('position', '-0.72 0.27 -0.54');
+          outText.setAttribute('text', 'value: ; color:#44ffaa; align:left; width:0.9; wrapCount:38');
+          outText.setAttribute('visible', 'false');
+          cam.appendChild(outText);
+          self.outPanel = outPanel;
+          self.outText  = outText;
+
+          // ── Grab nearest placeable on right grip ─────────────────
+          if (rightCtrl) {
+            rightCtrl.addEventListener('gripdown', function () {
+              var ctrlPos = new THREE.Vector3();
+              rightCtrl.object3D.getWorldPosition(ctrlPos);
+
+              var nearest = null, nearestDist = 8; // grab radius in metres
+              document.querySelectorAll('.placeable').forEach(function (el) {
+                var p = new THREE.Vector3();
+                el.object3D.getWorldPosition(p);
+                var d = ctrlPos.distanceTo(p);
+                if (d < nearestDist) { nearestDist = d; nearest = el; }
+              });
+              if (nearest) {
+                self.held = nearest;
+                nearest.setAttribute('material', 'emissive:#004422'); // subtle highlight
+              }
+            });
+
+            rightCtrl.addEventListener('gripup', function () {
+              if (self.held) {
+                self.held.removeAttribute('material');
+                self.held = null;
+              }
+            });
+
+            // Thumbstick X → rotate held building
+            rightCtrl.addEventListener('thumbstickmoved', function (e) {
+              self.stickX = e.detail.x;
+            });
+          }
+
+          // ── Y button → dump all positions ───────────────────────
+          if (leftCtrl) {
+            leftCtrl.addEventListener('ybuttondown', function () {
+              var visible = outPanel.getAttribute('visible');
+              if (visible === 'true' || visible === true) {
+                outPanel.setAttribute('visible', 'false');
+                outText.setAttribute('visible', 'false');
+                return;
+              }
+              var lines = 'BUILDING POSITIONS\n';
+              document.querySelectorAll('.placeable').forEach(function (el) {
+                var p  = el.object3D.position;
+                var ry = Math.round(THREE.MathUtils.radToDeg(el.object3D.rotation.y));
+                var id = el.getAttribute('data-name') || el.id || '?';
+                lines += id + '\n';
+                lines += ' X:' + p.x.toFixed(2) + ' Z:' + p.z.toFixed(2) + ' R:' + ry + '\n';
+              });
+              outText.setAttribute('text', 'value', lines);
+              outPanel.setAttribute('visible', 'true');
+              outText.setAttribute('visible', 'true');
+            });
+          }
+        });
+      },
+
+      tick: function () {
+        if (!this.held) { this.stickX = 0; return; }
+
+        // Drag building along ground with controller
+        var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+        if (!rightCtrl) return;
+        var p = new THREE.Vector3();
+        rightCtrl.object3D.getWorldPosition(p);
+        this.held.object3D.position.x = p.x;
+        this.held.object3D.position.z = p.z;
+
+        // Rotate with thumbstick
+        if (Math.abs(this.stickX) > 0.15) {
+          this.held.object3D.rotation.y += this.stickX * 0.02;
+        }
+      }
+    });
+  </script>
+
+  <script>
     function unlockAudio() {
       var ctx = AFRAME.THREE.AudioContext.getContext();
       if (ctx && ctx.state === 'suspended') ctx.resume();
@@ -336,6 +446,7 @@
   draco-loader
   coord-capture
   star-field
+  vr-placer
   fog="type: linear; color: #b0c8e8; near: 60; far: 120"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true; exposure: 1.0"
   shadow="type: pcfsoft"
@@ -369,46 +480,54 @@
 
   <a-sky color="#87ceeb"></a-sky>
 
-  <!-- ═══ BUILDINGS — spaced in a row along Z=-45 ═══ -->
-  <a-entity gltf-model="#gatehouse-glb"
-    position="-8 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    >
+  <!-- ═══ GROUND ZERO marker — glowing ring at spawn reference point ═══ -->
+  <a-torus position="0 0.02 -33" rotation="-90 0 0" radius="1.2" radius-tubular="0.04"
+           material="color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.7; transparent:true">
+  </a-torus>
+  <a-text value="GROUND ZERO" position="0 0.05 -31.6" rotation="-90 0 0"
+          color="#00ffcc" width="4" align="center"
+          material="shader:flat"></a-text>
+
+  <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
+  <a-entity class="placeable" data-name="gatehouse" id="b-gatehouse"
+    gltf-model="#gatehouse-glb"
+    position="-8 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
   </a-entity>
 
-  <a-entity gltf-model="#blackfriar-glb"
-    position="0 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    >
+  <a-entity class="placeable" data-name="blackfriar" id="b-blackfriar"
+    gltf-model="#blackfriar-glb"
+    position="0 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
   </a-entity>
 
-  <a-entity gltf-model="#princelet-glb"
-    position="8 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    >
+  <a-entity class="placeable" data-name="princelet" id="b-princelet"
+    gltf-model="#princelet-glb"
+    position="8 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
   </a-entity>
 
-  <a-entity gltf-model="#factory-glb"
-    position="16 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    >
+  <a-entity class="placeable" data-name="factory" id="b-factory"
+    gltf-model="#factory-glb"
+    position="16 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
   </a-entity>
 
-  <a-entity gltf-model="#antique-glb"
-    position="24 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    >
+  <a-entity class="placeable" data-name="antique" id="b-antique"
+    gltf-model="#antique-glb"
+    position="24 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
   </a-entity>
 
-  <a-entity gltf-model="#fence-glb"
-    position="32 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    >
+  <a-entity class="placeable" data-name="fence" id="b-fence"
+    gltf-model="#fence-glb"
+    position="32 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
   </a-entity>
 
   <!-- ═══ PLAYER ═══
-       Spawns centred in front of the row, looking toward the buildings. -->
+       Spawns at ground zero, looking toward the buildings. -->
   <a-entity id="rig" position="0 0 -33"
             movement-controls="fly: false; speed: 0.8; camera: #cam">
     <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
 
     <a-entity oculus-touch-controls="hand: left">
       <a-text value="X: markers"    position="0.032 0.018 -0.052" rotation="-50 0 0" color="#ffee44" width="0.16" align="left"></a-text>
-      <a-text value="Y: —"          position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#aaaaaa" width="0.16" align="left"></a-text>
+      <a-text value="Y: export pos" position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#44ffaa" width="0.16" align="left"></a-text>
       <a-text value="trigger: clear" position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
       <a-text value="stick: move"   position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
     </a-entity>
