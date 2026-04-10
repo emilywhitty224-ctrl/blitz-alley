@@ -218,6 +218,8 @@
           var matX = 'color:#ff4444; emissive:#ff2200; emissiveIntensity:0.9; shader:flat';
           var matZ = 'color:#4488ff; emissive:#2244ff; emissiveIntensity:0.9; shader:flat';
 
+          var matTick = 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat';
+
           for (var z = 0; z >= -30; z -= 3) {
             // Y axis — yellow vertical stick, 2 m tall
             var stickY = document.createElement('a-box');
@@ -227,6 +229,22 @@
             stickY.setAttribute('depth', '0.06');
             stickY.setAttribute('material', matY);
             markersEl.appendChild(stickY);
+
+            // Height reference tick at 1.73 m (Emily, 5'8")
+            var tick = document.createElement('a-box');
+            tick.setAttribute('position', '0 1.73 ' + z);
+            tick.setAttribute('width', '0.28');
+            tick.setAttribute('height', '0.04');
+            tick.setAttribute('depth', '0.04');
+            tick.setAttribute('material', matTick);
+            markersEl.appendChild(tick);
+            var tickLbl = document.createElement('a-text');
+            tickLbl.setAttribute('value', "5'8\"");
+            tickLbl.setAttribute('position', '0.18 1.73 ' + z);
+            tickLbl.setAttribute('color', '#ffffff');
+            tickLbl.setAttribute('width', '2');
+            tickLbl.setAttribute('align', 'left');
+            markersEl.appendChild(tickLbl);
 
             // X axis — red arm, 2 m wide (centred, so ±1 m each side)
             var armX = document.createElement('a-box');
