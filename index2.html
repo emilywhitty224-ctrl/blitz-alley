@@ -455,10 +455,9 @@
             rightCtrl.addEventListener('gripdown', function () {
               self.gripping = true;
               laserPivot.setAttribute('visible', 'true');
+              // Stop player movement while placing so right stick spins building only
+              try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0; camera: #cam'); } catch(e) {}
               if (self.hovered) {
-                var hovId = self.hovered.getAttribute('data-name');
-                var lockEntry = self.locked[hovId];
-                if (lockEntry && lockEntry.state) return; // locked — can't grab
                 self.history.push({
                   el:    self.hovered,
                   x:     self.hovered.object3D.position.x,
@@ -471,9 +470,6 @@
             });
 
             rightCtrl.addEventListener('gripup', function () {
-              // Do NOT call rebuildBbox here — setFromObject on release still traverses
-              // all mesh vertices and is expensive enough to spike frame time on Quest.
-              // The bbox delta-offset in tick keeps hover working without a full rebuild.
               self.gripping = false;
               self.moving   = false;
               self.held     = null;
@@ -481,6 +477,8 @@
               self.heightY  = 0;
               self.scaleY   = 0;
               laserPivot.setAttribute('visible', 'false');
+              // Restore movement
+              try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0.8; camera: #cam'); } catch(e) {}
             });
 
             rightCtrl.addEventListener('triggerdown', function () {
