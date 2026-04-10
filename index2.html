@@ -6,6 +6,21 @@
   <title>Blackout Alley — London, 1940</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
+  <!-- Draco decoder — needed to parse Draco-compressed GLB files.
+       Sets A-Frame's GLTF loader to fetch the WASM decoder from Google CDN
+       (cached after first load, so only downloads once per device). -->
+  <script>
+    AFRAME.registerComponent('draco-loader', {
+      init: function () {
+        var dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+        var gltfSystem = this.el.systems['gltf-model'];
+        if (gltfSystem && gltfSystem.loader) {
+          gltfSystem.loader.setDRACOLoader(dracoLoader);
+        }
+      }
+    });
+  </script>
   <script>
     AFRAME.registerComponent('fire-flicker', {
       schema: { min: { default: 0.6 }, max: { default: 1.6 }, chance: { default: 0.08 } },
@@ -112,6 +127,7 @@
 </head>
 <body>
 <a-scene
+  draco-loader
   fog="type: linear; color: #1a1208; near: 22; far: 55"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
@@ -1028,9 +1044,9 @@
   ════════════════════════════════════════════════════════════════ -->
   <a-entity
     gltf-model="url(victorian_street_scene.glb)"
-    position="0 0 -50"
+    position="0 7 -50"
     rotation="0 0 0"
-    scale="48 48 48">
+    scale="65 65 65">
   </a-entity>
 
   <!-- ═══ PLAYER ═══ -->
