@@ -109,6 +109,40 @@
       }
     });
 
+    // ── VICTORIAN NIGHT TINT ────────────────────────────────────────────
+    // Runs after the Victorian GLB loads. Darkens all surfaces for the
+    // blackout night scene and adds faint amber window glow.
+    AFRAME.registerComponent('victorian-night', {
+      init: function () {
+        this.el.addEventListener('model-loaded', function (e) {
+          var nightCol  = new THREE.Color(0x1a1208);   // very dark warm brown
+          var windowCol = new THREE.Color(0xff8822);    // amber window glow
+          e.detail.model.traverse(function (node) {
+            if (!node.isMesh) return;
+            var mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach(function (mat) {
+              if (!mat) return;
+              // Darken everything — multiply existing colour toward near-black
+              mat.color.lerp(nightCol, 0.72);
+              mat.roughness = Math.min((mat.roughness || 0.8) + 0.15, 1.0);
+              // Windows: identify by high metalness or near-white/grey base colour
+              var c = mat.color;
+              var brightness = (c.r + c.g + c.b) / 3;
+              if (mat.metalness > 0.3 || brightness > 0.55) {
+                // Treat as glass — add faint amber leak
+                mat.emissive = mat.emissive || new THREE.Color(0x000000);
+                mat.emissive.set(0x1a0a00);
+                mat.emissiveIntensity = 0.35;
+                mat.color.set(0x0a0804);
+                mat.roughness = 0.15;
+              }
+              mat.needsUpdate = true;
+            });
+          });
+        });
+      }
+    });
+
     // ── COORD CAPTURE ───────────────────────────────────────────────────
     // Pull the trigger on either Quest controller to snapshot its exact
     // world position (X/Y/Z). Shown in a HUD overlay — screenshot to record,
@@ -1084,9 +1118,10 @@
   ════════════════════════════════════════════════════════════════ -->
   <a-entity
     gltf-model="url(victorian_street_scene.glb)"
-    position="0 7 -50"
+    position="0 5.8 -50"
     rotation="0 0 0"
-    scale="65 65 65">
+    scale="65 65 65"
+    victorian-night>
   </a-entity>
 
   <!-- ═══════════════════════════════════════════════════════════════
