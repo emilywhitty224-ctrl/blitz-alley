@@ -662,21 +662,10 @@
             }
           } catch (e) {}
 
-          // ── Night toggle (left trigger) ───────────────────────────────
-          var skyEl = document.querySelector('a-sky');
-          var sceneEl = self.el.sceneEl;
+          // ── Night toggle (left trigger — same as world button) ───────
           if (leftCtrl) {
             leftCtrl.addEventListener('triggerdown', function () {
-              self.nightMode = !self.nightMode;
-              if (self.nightMode) {
-                if (skyEl) skyEl.setAttribute('color', '#020408');
-                sceneEl.setAttribute('fog', 'type: linear; color: #050810; near: 20; far: 70');
-                sceneEl.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08');
-              } else {
-                if (skyEl) skyEl.setAttribute('color', '#87ceeb');
-                sceneEl.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
-                sceneEl.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
-              }
+              if (window.toggleNight) window.toggleNight();
             });
           }
 
@@ -770,6 +759,32 @@
   </script>
 
   <script>
+    // Shared day/night toggle — called by both the world button and left trigger
+    window._nightMode = false;
+    window.toggleNight = function () {
+      window._nightMode = !window._nightMode;
+      var scene  = document.querySelector('a-scene');
+      var sky    = document.querySelector('a-sky');
+      var btn    = document.querySelector('#night-btn');
+      if (window._nightMode) {
+        if (sky) sky.setAttribute('color', '#020408');
+        scene.setAttribute('fog', 'type: linear; color: #050810; near: 20; far: 70');
+        scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08');
+        if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
+      } else {
+        if (sky) sky.setAttribute('color', '#87ceeb');
+        scene.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
+        scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
+        if (btn) btn.setAttribute('material', 'color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat');
+      }
+    };
+
+    // Wire up the world button (gaze fuse fires 'click')
+    document.addEventListener('DOMContentLoaded', function () {
+      var btn = document.querySelector('#night-btn');
+      if (btn) btn.addEventListener('click', window.toggleNight);
+    });
+
     function unlockAudio() {
       var ctx = AFRAME.THREE.AudioContext.getContext();
       if (ctx && ctx.state === 'suspended') ctx.resume();
@@ -814,6 +829,22 @@
            material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
 
   <a-sky color="#87ceeb"></a-sky>
+
+  <!-- ═══ DAY / NIGHT toggle button — post to right of compass ring ═══ -->
+  <a-entity position="5.5 0 -33">
+    <!-- post -->
+    <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
+           material="color:#223344; shader:flat"></a-box>
+    <!-- button face — gaze for 1.5s to toggle -->
+    <a-box class="btn" id="night-btn"
+           width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
+           material="color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat">
+    </a-box>
+    <a-text value="DAY / NIGHT" position="0 1.4 0" align="center"
+            color="#88ccff" width="2.5" material="shader:flat"></a-text>
+    <a-text value="(look 1.5s)" position="0 1.02 0" align="center"
+            color="#445566" width="2" material="shader:flat"></a-text>
+  </a-entity>
 
   <!-- ═══ GROUND ZERO marker — glowing ring at spawn reference point ═══ -->
   <a-torus position="0 0.02 -33" rotation="-90 0 0" radius="1.2" radius-tubular="0.04"
@@ -873,7 +904,15 @@
        Spawns at ground zero, looking toward the buildings. -->
   <a-entity id="rig" position="0 0 -33"
             movement-controls="fly: false; speed: 0.8; camera: #cam">
-    <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
+    <a-entity id="cam" camera look-controls position="0 1.6 0">
+      <!-- Gaze cursor: look at .btn objects for 1.5s to activate -->
+      <a-cursor fuse="true" fuse-timeout="1500"
+                raycaster="objects: .btn; far: 20; interval: 200"
+                material="color:#ffffff; shader:flat; opacity:0.6"
+                geometry="primitive: ring; radiusInner: 0.008; radiusOuter: 0.014"
+                position="0 0 -1">
+      </a-cursor>
+    </a-entity>
 
     <a-entity oculus-touch-controls="hand: left">
       <a-text value="X: markers"    position="0.032 0.018 -0.052" rotation="-50 0 0" color="#ffee44" width="0.16" align="left"></a-text>
