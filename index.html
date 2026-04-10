@@ -309,7 +309,8 @@
     <img id="brick-ao"    src="brown_brick_ao.jpg">
     <audio id="blitz-snd" src="blitz.mp3" preload="auto"></audio>
     <audio id="vera-snd"  src="vera.mp3"  preload="auto"></audio>
-    <a-asset-item id="pubdoors-glb" src="Pubdoors.glb"></a-asset-item>
+    <a-asset-item id="pubdoors-glb"  src="Pubdoors.glb"></a-asset-item>
+    <a-asset-item id="vic-street-glb" src="victorian_street_scene.glb"></a-asset-item>
   </a-assets>
 
   <!-- ═══════════════════════ AUDIO ═══════════════════════ -->
@@ -542,6 +543,14 @@
 
   <!-- ═══════════════════════ PROPS ═══════════════════════ -->
   <a-entity gltf-model="url(Postbox.glb)" position="5.5 0 -7.2" rotation="0 180 0" scale="1 1 1"></a-entity>
+
+  <!-- ═══════════════════════ VICTORIAN STREET GLB ═══════════════════════ -->
+  <!-- Placed at origin, scale 1:1. Review in VR and adjust position/rotation/scale. -->
+  <a-entity gltf-model="#vic-street-glb"
+            position="0 0 0"
+            rotation="0 0 0"
+            scale="1 1 1">
+  </a-entity>
 
   <!-- ═══════════════════════ SURROUNDING TERRACE HOUSES ═══════════════════════ -->
   <!-- Entity rotation: 0 90 0=east-facing, 0 -90 0=west, 0 0 0=south, 0 180 0=north     -->
