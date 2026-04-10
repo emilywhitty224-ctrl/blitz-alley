@@ -336,24 +336,31 @@
         self.stickX     = 0;  // LEFT stick X  → spin
         self.heightY    = 0;  // LEFT stick Y  → push into / pull out of ground
         self.scaleY     = 0;  // RIGHT stick Y → scale
-        self.raycaster  = new THREE.Raycaster();
-        self.tmpQuat    = new THREE.Quaternion();
-        self.groundPt   = new THREE.Vector3();
-        self.laserPivot = null;
-        self.hovered    = null;
-        self.history    = [];
-        self.originals  = {};
-        self.bboxCache  = {};
-        self.bboxKeys   = [];
-        self.frameCount = 0;
-        self.locked     = {};
-        self.cloneCounts = {};
-        self.nightMode  = false;
+        self.raycaster      = new THREE.Raycaster();
+        self.leftRaycaster  = new THREE.Raycaster();
+        self.tmpQuat        = new THREE.Quaternion();
+        self.groundPt       = new THREE.Vector3();
+        self.laserPivot     = null;   // right-hand laser
+        self.leftLaserPivot = null;   // left-hand laser (height control)
+        self.hovered        = null;
+        self.leftHovered    = null;
+        self.leftGripping   = false;
+        self.history        = [];
+        self.originals      = {};
+        self.bboxCache      = {};
+        self.bboxKeys       = [];
+        self.frameCount     = 0;
+        self.cloneCounts    = {};
+        self.nightMode      = false;
         // Pre-allocate tick vectors — never new() inside tick
-        self._tickOrigin = new THREE.Vector3();
-        self._tickDir    = new THREE.Vector3();
-        self._tickDist   = new THREE.Vector3();
-        self._tmpBox     = new THREE.Box3();
+        self._tickOrigin  = new THREE.Vector3();
+        self._tickDir     = new THREE.Vector3();
+        self._tickDist    = new THREE.Vector3();
+        self._tmpBox      = new THREE.Box3();
+        self._leftOrigin  = new THREE.Vector3();
+        self._leftDir     = new THREE.Vector3();
+        self._leftDist    = new THREE.Vector3();
+        self._leftQuat    = new THREE.Quaternion();
 
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
@@ -402,6 +409,20 @@
           if (rightCtrl) rightCtrl.appendChild(laserPivot);
           self.laser      = laser;
           self.laserPivot = laserPivot;
+
+          // ── Left laser pivot — orange, for height control ────────────
+          var leftLaserPivot = document.createElement('a-entity');
+          leftLaserPivot.setAttribute('rotation', '-45 0 0');
+          leftLaserPivot.setAttribute('visible', 'false');
+          var leftLaser = document.createElement('a-box');
+          leftLaser.setAttribute('width',  '0.005');
+          leftLaser.setAttribute('height', '0.005');
+          leftLaser.setAttribute('depth',  '20');
+          leftLaser.setAttribute('position', '0 0 -10');
+          leftLaser.setAttribute('material', 'color:#ff8800; emissive:#ff6600; emissiveIntensity:1; shader:flat; opacity:0.7; transparent:true');
+          leftLaserPivot.appendChild(leftLaser);
+          if (leftCtrl) leftCtrl.appendChild(leftLaserPivot);
+          self.leftLaserPivot = leftLaserPivot;
 
           // ── Output HUD ──────────────────────────────────────────
           var outPanel = document.createElement('a-plane');
@@ -491,8 +512,19 @@
               last.el.object3D.scale.setScalar(last.scale);
             });
 
-            // Left GRIP — stamp height post OR reset building if right gripping
+            // Left GRIP — show left laser for height control
             leftCtrl.addEventListener('gripdown', function () {
+              self.leftGripping = true;
+              self.leftLaserPivot.setAttribute('visible', 'true');
+            });
+            leftCtrl.addEventListener('gripup', function () {
+              self.leftGripping = false;
+              self.leftHovered  = null;
+              self.leftLaserPivot.setAttribute('visible', 'false');
+            });
+
+            // Left X — stamp improved reference post  OR  reset held building
+            leftCtrl.addEventListener('xbuttondown', function () {
               if (self.gripping && self.held) {
                 // Reset to original position
                 var id   = self.held.getAttribute('data-name');
@@ -504,29 +536,51 @@
                   self.held.object3D.scale.setScalar(orig.scale);
                 }
               } else {
-                // Stamp 5'8" height post
-                var p = new THREE.Vector3();
-                leftCtrl.object3D.getWorldPosition(p);
+                // Stamp reference post at left-controller position
+                var wp = new THREE.Vector3();
+                leftCtrl.object3D.getWorldPosition(wp);
                 var post = document.createElement('a-entity');
-                post.setAttribute('position', p.x + ' 0 ' + p.z);
+                post.setAttribute('position', wp.x + ' 0 ' + wp.z);
+
+                // Main pole — 6m, white
                 var pole = document.createElement('a-box');
-                pole.setAttribute('width', '0.04'); pole.setAttribute('height', '1.73'); pole.setAttribute('depth', '0.04');
-                pole.setAttribute('position', '0 0.865 0');
-                pole.setAttribute('material', 'color:#ffee44; emissive:#ffcc00; emissiveIntensity:0.8; shader:flat; opacity:0.85; transparent:true');
+                pole.setAttribute('width', '0.04'); pole.setAttribute('height', '6'); pole.setAttribute('depth', '0.04');
+                pole.setAttribute('position', '0 3 0');
+                pole.setAttribute('material', 'color:#cccccc; emissive:#aaaaaa; emissiveIntensity:0.6; shader:flat; opacity:0.9; transparent:true');
                 post.appendChild(pole);
-                var cap = document.createElement('a-sphere');
-                cap.setAttribute('radius', '0.06'); cap.setAttribute('position', '0 1.73 0');
-                cap.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
-                post.appendChild(cap);
-                var bar = document.createElement('a-box');
-                bar.setAttribute('width', '0.5'); bar.setAttribute('height', '0.03'); bar.setAttribute('depth', '0.03');
-                bar.setAttribute('position', '0 1.73 0');
-                bar.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
-                post.appendChild(bar);
-                var lbl = document.createElement('a-text');
-                lbl.setAttribute('value', "5'8\" / 1.73m"); lbl.setAttribute('position', '0.3 1.73 0');
-                lbl.setAttribute('color', '#ffffff'); lbl.setAttribute('width', '1.8'); lbl.setAttribute('align', 'left');
-                post.appendChild(lbl);
+
+                // Floor base ring
+                var base = document.createElement('a-torus');
+                base.setAttribute('radius', '0.3'); base.setAttribute('radius-tubular', '0.02');
+                base.setAttribute('rotation', '-90 0 0');
+                base.setAttribute('position', '0 0.01 0');
+                base.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat');
+                post.appendChild(base);
+
+                // Metre markers with labels
+                var marks = [
+                  { y: 1,   color: '#ffee44', label: '1m' },
+                  { y: 2.1, color: '#ff8844', label: '2.1m  door' },
+                  { y: 3,   color: '#ff4444', label: '3m  1st floor' },
+                  { y: 4.5, color: '#ff88ff', label: '4.5m' },
+                  { y: 6,   color: '#88aaff', label: '6m  2nd floor' }
+                ];
+                marks.forEach(function (m) {
+                  var bar = document.createElement('a-box');
+                  bar.setAttribute('width', '0.6'); bar.setAttribute('height', '0.03'); bar.setAttribute('depth', '0.03');
+                  bar.setAttribute('position', '0.3 ' + m.y + ' 0');
+                  bar.setAttribute('material', 'color:' + m.color + '; emissive:' + m.color + '; emissiveIntensity:0.9; shader:flat');
+                  post.appendChild(bar);
+                  var txt = document.createElement('a-text');
+                  txt.setAttribute('value', m.label);
+                  txt.setAttribute('position', '0.65 ' + m.y + ' 0');
+                  txt.setAttribute('color', m.color);
+                  txt.setAttribute('width', '2.5');
+                  txt.setAttribute('align', 'left');
+                  txt.setAttribute('material', 'shader:flat');
+                  post.appendChild(txt);
+                });
+
                 self.el.sceneEl.appendChild(post);
               }
             });
@@ -692,9 +746,9 @@
 
         try {
 
-        // ── Hover: bbox check every 12 frames while gripping ────────────
-        // Plain for-loop, pre-cached keys array, no Object.keys/bind/new in hot path.
-        if (this.gripping && this.frameCount % 12 === 0) {
+        // ── Hover: bbox check every 12 frames — always on so hovered is
+        // ready the instant grip fires (laser invisible but ray still runs)
+        if (this.frameCount % 12 === 0) {
           this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
           this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
           this._tickDir.set(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
@@ -747,35 +801,21 @@
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
 
-        // ── Height — left stick Y: raise / lower for floor matching ────
-        // Proportional rate: small push = fine 2mm/frame, full push = 7mm/frame
-        var adjusting = false;
-        if (Math.abs(this.heightY) > 0.15) {
-          this.held.object3D.position.y += this.heightY * 0.007;
-          adjusting = true;
-        }
-
         // ── Scale — right stick Y: up = bigger, down = smaller ─────────
+        var adjusting = false;
         if (Math.abs(this.scaleY) > 0.15) {
           var ns = Math.max(0.02, this.held.object3D.scale.x + this.scaleY * 0.002);
           this.held.object3D.scale.setScalar(ns);
           adjusting = true;
         }
 
-        // ── Live readout — Y offset + scale, shown while adjusting ─────
-        // Updates every 6 frames to avoid text-reflow every frame
+        // ── Live scale readout ───────────────────────────────────────────
         if (this.readout) {
-          if (adjusting) {
-            this.readoutTimer = 90; // stay visible ~1.25s after last adjustment
-          }
+          if (adjusting) { this.readoutTimer = 90; }
           if (this.readoutTimer > 0) {
             this.readoutTimer--;
             if (this.frameCount % 6 === 0) {
-              var yOff  = this.held.object3D.position.y.toFixed(2);
-              var yLbl  = yOff > 0 ? '+' + yOff : yOff;
-              var scLbl = this.held.object3D.scale.x.toFixed(3);
-              this.readout.setAttribute('text', 'value',
-                'floor offset  ' + yLbl + ' m\nscale  ' + scLbl);
+              this.readout.setAttribute('text', 'value', 'scale  ' + this.held.object3D.scale.x.toFixed(3));
               this.readout.setAttribute('visible', 'true');
             }
           } else {
@@ -784,6 +824,49 @@
         }
 
         } // end if (this.held)
+
+        // ── Left laser hover + height control ──────────────────────────
+        // Entirely independent of right hand — can raise ANY building.
+        if (this.leftLaserPivot && this.leftGripping && this.frameCount % 12 === 0) {
+          this.leftLaserPivot.object3D.getWorldPosition(this._leftOrigin);
+          this.leftLaserPivot.object3D.getWorldQuaternion(this._leftQuat);
+          this._leftDir.set(0, 0, -1).applyQuaternion(this._leftQuat).normalize();
+          this.leftRaycaster.set(this._leftOrigin, this._leftDir);
+
+          var leftBest = Infinity;
+          var leftNew  = null;
+          var lkeys    = this.bboxKeys;
+          var lcache   = this.bboxCache;
+          var lbox     = this._tmpBox;  // safe: only 1 loop runs per frame
+          for (var li = 0; li < lkeys.length; li++) {
+            var lentry = lcache[lkeys[li]];
+            if (!lentry || !lentry.el) continue;
+            var lcur  = lentry.el.object3D.position;
+            var llast = lentry.lastPos;
+            lbox.copy(lentry.box);
+            lbox.min.x += lcur.x - llast.x; lbox.min.z += lcur.z - llast.z;
+            lbox.max.x += lcur.x - llast.x; lbox.max.z += lcur.z - llast.z;
+            if (this.leftRaycaster.ray.intersectBox(lbox, this._leftDist) !== null) {
+              var ld = this._leftOrigin.distanceTo(this._leftDist);
+              if (ld < leftBest) { leftBest = ld; leftNew = lentry.el; }
+            }
+          }
+          this.leftHovered = leftNew;
+        }
+
+        // Height adjust: left stick Y moves whatever left laser points at
+        if (this.leftGripping && this.leftHovered && Math.abs(this.heightY) > 0.15) {
+          this.leftHovered.object3D.position.y += this.heightY * 0.007;
+          // Show Y offset in readout
+          if (this.readout && this.frameCount % 6 === 0) {
+            var hy  = this.leftHovered.object3D.position.y.toFixed(2);
+            var hlb = parseFloat(hy) >= 0 ? '+' + hy : hy;
+            this.readout.setAttribute('text', 'value', 'floor offset  ' + hlb + ' m');
+            this.readout.setAttribute('visible', 'true');
+            this.readoutTimer = 60;
+          }
+        }
+
         } catch (e) { console.error('vr-placer tick error:', e); }
       }
     });
@@ -901,7 +984,7 @@
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="2.8"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="── RIGHT HAND ──&#10;GRIP          laser on / select&#10;+ TRIGGER     move building&#10;STICK L/R     spin&#10;STICK U/D     scale (up=big)&#10;STICK CLICK   clone&#10;A             snap to floor Y=0&#10;B             fly&#10;&#10;── LEFT HAND ──&#10;STICK U/D     raise / lower&#10;STICK CLICK   undo&#10;GRIP          height post&#10;X             lock / unlock&#10;Y             save + export&#10;&#10;── WORLD ──&#10;DAY/NIGHT btn gaze 1.5s"
+  <a-text value="── RIGHT HAND ──&#10;GRIP          laser on / select&#10;+ TRIGGER     move building&#10;STICK L/R     spin&#10;STICK U/D     scale (up=big)&#10;STICK CLICK   clone&#10;A             snap to floor&#10;B             fly&#10;&#10;── LEFT HAND ──&#10;GRIP          laser on / raise-lower&#10;STICK U/D     raise / lower height&#10;STICK CLICK   undo&#10;X             reference post&#10;X + R.GRIP    reset building&#10;Y             save + export&#10;&#10;── WORLD ──&#10;DAY/NIGHT btn gaze 1.5s"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
