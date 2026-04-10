@@ -74,7 +74,15 @@
           el.appendChild(b);
         }
         function bwall(pos, w, h, d) {
-          spawn(pos, w, h, d, { material: bm + '; repeat: ' + +(w/0.8).toFixed(1) + ' ' + +(h/0.38).toFixed(1) + '; color: ' + bv });
+          const b2 = document.createElement('a-box');
+          b2.setAttribute('position', pos);
+          b2.setAttribute('width',  '' + w);
+          b2.setAttribute('height', '' + h);
+          b2.setAttribute('depth',  '' + d);
+          b2.setAttribute('cast-shadow', 'true');
+          b2.setAttribute('receive-shadow', 'true');
+          b2.setAttribute('material', bm + '; repeat: ' + +(w/0.8).toFixed(1) + ' ' + +(h/0.38).toFixed(1) + '; color: ' + bv);
+          el.appendChild(b2);
         }
         function spawnCyl(pos, radius, h, col) {
           const c = document.createElement('a-cylinder');
@@ -116,7 +124,7 @@
         // ── Windows + Bay ───────────────────────────────────────
         const winW = 0.9, winH = 1.1;
         const wo  = Math.min(W * 0.27, W/2 - winW/2 - 0.25);
-        const glm = 'transparent: true; opacity: 0.88; color: #080a08; roughness: 0.3; metalness: 0.15';
+        const glm = 'transparent: true; opacity: 0.80; color: #0a0804; roughness: 0.2; metalness: 0.08; emissive: #5c3010; emissiveIntensity: 0.55';
 
         // Bay window on wider houses, opposite side from door
         const hasBay = W >= 4.5;
@@ -237,7 +245,7 @@
         }
         const fr  = '#0d1a0a';
         const bar = '#0d1a0a';
-        const glm = 'transparent: true; opacity: 0.93; metalness: 0.05; roughness: 0.5; color: #040804';
+        const glm = 'transparent: true; opacity: 0.80; metalness: 0.05; roughness: 0.3; color: #0a0804; emissive: #4a2808; emissiveIntensity: 0.5';
 
         if (isWest) {
           // Frame: inner face X=3.95, wall face X=4.0 — 5cm gap, no z-fight
@@ -316,7 +324,11 @@
   <a-light type="hemisphere" color="#c8d8e8" groundColor="#6a5840" intensity="1.2"></a-light>
   <!-- Main sun — slightly overcast, angled for side-lit street depth -->
   <a-light type="directional" color="#fff4e0" intensity="1.4"
-           position="-8 20 5" cast-shadow="true">
+           position="-8 20 5" cast-shadow="true"
+           shadow-camera-left="-35" shadow-camera-right="55"
+           shadow-camera-top="35"  shadow-camera-bottom="-45"
+           shadow-camera-near="0.5" shadow-camera-far="70"
+           shadow-map-width="2048"  shadow-map-height="2048">
   </a-light>
 
   <!-- ═══════════════════════ STREET ═══════════════════════ -->
@@ -588,8 +600,36 @@
            material="src: #stone-diff; roughnessMap: #stone-rough; aoMap: #stone-ao; repeat: 18 2; roughness: 0.92; metalness: 0; color: #888880"></a-plane>
   <a-box  position="13 0.09 6.0"   width="38" height="0.18" depth="0.12" color="#404040"></a-box>
 
+  <!-- ═══════════════════════ ROAD VARIATION ═══════════════════════ -->
+  <!-- Dark worn / damp patches on cobblestones -->
+  <a-plane position="10  0.005 -8"  rotation="-90  0 0" width="4.5" height="2.5"
+           material="color: #2e2c26; transparent: true; opacity: 0.45; roughness: 1"></a-plane>
+  <a-plane position="20  0.005 -18" rotation="-90 12 0" width="3.5" height="2.2"
+           material="color: #2a2820; transparent: true; opacity: 0.38; roughness: 1"></a-plane>
+  <a-plane position="6   0.005 -24" rotation="-90  5 0" width="2.8" height="3.5"
+           material="color: #302e28; transparent: true; opacity: 0.35; roughness: 1"></a-plane>
+  <a-plane position="17  0.005 -5"  rotation="-90 -8 0" width="5"   height="2"
+           material="color: #2e2c24; transparent: true; opacity: 0.30; roughness: 1"></a-plane>
+  <a-plane position="14  0.005 -28" rotation="-90 20 0" width="3"   height="2"
+           material="color: #282620; transparent: true; opacity: 0.35; roughness: 1"></a-plane>
+
   <!-- ═══════════════════════ SKY ═══════════════════════ -->
   <a-sky color="#8a9aaa"></a-sky>
+
+  <!-- ═══════════════════════ CLOUDS ═══════════════════════ -->
+  <!-- Flat-bottomed overcast cloud boxes above roofline (~13 m) -->
+  <a-box position="12  52 -18" width="50" height="7"  depth="32"
+         material="color: #c8ccd2; transparent: true; opacity: 0.68; roughness: 1; metalness: 0"></a-box>
+  <a-box position="-4  47 -10" width="32" height="5"  depth="22"
+         material="color: #d0d4d8; transparent: true; opacity: 0.58; roughness: 1; metalness: 0"></a-box>
+  <a-box position="32  50 -28" width="26" height="6"  depth="20"
+         material="color: #c4c8ce; transparent: true; opacity: 0.62; roughness: 1; metalness: 0"></a-box>
+  <a-box position="5   56 -42" width="42" height="8"  depth="28"
+         material="color: #d4d8dc; transparent: true; opacity: 0.72; roughness: 1; metalness: 0"></a-box>
+  <a-box position="22  44 -4"  width="24" height="4"  depth="18"
+         material="color: #ccd0d4; transparent: true; opacity: 0.52; roughness: 1; metalness: 0"></a-box>
+  <a-box position="-8  60  10" width="38" height="10" depth="24"
+         material="color: #c0c4ca; transparent: true; opacity: 0.65; roughness: 1; metalness: 0"></a-box>
 
   <!-- ═══════════════════════ PLAYER ═══════════════════════ -->
   <a-entity id="rig"
