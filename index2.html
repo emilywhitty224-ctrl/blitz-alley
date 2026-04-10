@@ -333,8 +333,9 @@
         self.held       = null;
         self.gripping   = false;
         self.moving     = false;
-        self.stickX     = 0;
-        self.scaleY     = 0;
+        self.stickX     = 0;  // LEFT stick X  → spin
+        self.heightY    = 0;  // LEFT stick Y  → push into / pull out of ground
+        self.scaleY     = 0;  // RIGHT stick Y → scale
         self.raycaster  = new THREE.Raycaster();
         self.tmpQuat    = new THREE.Quaternion();
         self.groundPt   = new THREE.Vector3();
@@ -445,6 +446,8 @@
               self.moving   = false;
               self.held     = null;
               self.stickX   = 0;
+              self.heightY  = 0;
+              self.scaleY   = 0;
               laserPivot.setAttribute('visible', 'false');
             });
 
@@ -456,14 +459,15 @@
             });
 
             rightCtrl.addEventListener('thumbstickmoved', function (e) {
-              self.stickX = e.detail.x;
+              self.scaleY = e.detail.y;  // right stick Y → scale
             });
           }
 
           // ── Left controller ──────────────────────────────────────
           if (leftCtrl) {
             leftCtrl.addEventListener('thumbstickmoved', function (e) {
-              self.scaleY = e.detail.y;
+              self.stickX  = e.detail.x;  // left stick X → spin (no conflict with movement-controls turn)
+              self.heightY = e.detail.y;  // left stick Y → height (push into / pull out of ground)
             });
 
             // Left stick CLICK → undo last move
@@ -659,14 +663,19 @@
           }
         }
 
-        // ── Spin — only when trigger NOT held ──────────────────────────
+        // ── Spin — left stick X, only when trigger NOT held ────────────
         if (!this.moving && Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
 
-        // ── Scale ───────────────────────────────────────────────────────
+        // ── Height — left stick Y: push into / pull out of ground ───────
+        if (Math.abs(this.heightY) > 0.15) {
+          this.held.object3D.position.y += this.heightY * 0.007;
+        }
+
+        // ── Scale — right stick Y: stick up = bigger, stick down = smaller
         if (Math.abs(this.scaleY) > 0.15) {
-          var ns = Math.max(0.05, this.held.object3D.scale.x - this.scaleY * 0.003);
+          var ns = Math.max(0.02, this.held.object3D.scale.x + this.scaleY * 0.002);
           this.held.object3D.scale.setScalar(ns);
         }
 
@@ -746,7 +755,7 @@
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move building&#10;STICK L/R (R)     spin&#10;STICK U/D (L)     scale&#10;STICK CLICK (L)   undo last move&#10;GRIP (L)          stamp height post&#10;GRIP (L)+GRIP (R) reset building&#10;X (L)             lock / unlock&#10;Y (L)             export + copy"
+  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move XZ&#10;STICK L/R (L)     spin&#10;STICK U/D (L)     push into ground&#10;STICK U/D (R)     scale&#10;STICK CLICK (L)   undo&#10;GRIP (L)          height post&#10;GRIP (L)+GRIP (R) reset&#10;X (L)             lock / unlock&#10;Y (L)             export + copy"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
