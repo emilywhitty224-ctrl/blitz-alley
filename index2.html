@@ -350,8 +350,10 @@
         self.bboxCache      = {};
         self.bboxKeys       = [];
         self.frameCount     = 0;
-        self.cloneCounts    = {};
-        self.nightMode      = false;
+        self.cloneCounts       = {};
+        self.nightMode         = false;
+        self._playerRotLock    = null; // locks rig Y rotation while gripping
+        self._rigEl            = null; // cached in scene loaded
         // Pre-allocate tick vectors — never new() inside tick
         self._tickOrigin  = new THREE.Vector3();
         self._tickDir     = new THREE.Vector3();
@@ -365,6 +367,7 @@
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
           var rigEl     = document.querySelector('#rig');
+          self._rigEl   = rigEl;
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
 
@@ -387,12 +390,13 @@
               var id = el.getAttribute('data-name');
               var p  = el.object3D.position;
               self.originals[id] = {
-                x: p.x, z: p.z,
+                x: p.x, y: p.y, z: p.z,
                 rotY: el.object3D.rotation.y,
                 scale: el.object3D.scale.x
               };
               rebuildBbox(el);
             });
+            window._placerOriginals = self.originals; // exposed for reset button
           });
 
           // ── Laser pivot — tilted 45° down ────────────────────────
@@ -455,7 +459,8 @@
             rightCtrl.addEventListener('gripdown', function () {
               self.gripping = true;
               laserPivot.setAttribute('visible', 'true');
-              // Stop player movement while placing so right stick spins building only
+              // Lock rig rotation so right stick can't spin the player
+              if (rigEl) self._playerRotLock = rigEl.object3D.rotation.y;
               try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0; camera: #cam'); } catch(e) {}
               if (self.hovered) {
                 self.history.push({
@@ -477,7 +482,7 @@
               self.heightY  = 0;
               self.scaleY   = 0;
               laserPivot.setAttribute('visible', 'false');
-              // Restore movement
+              self._playerRotLock = null;
               try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0.8; camera: #cam'); } catch(e) {}
             });
 
@@ -742,6 +747,12 @@
         if (!this.laserPivot) return;
         this.frameCount++;
 
+        // Lock rig Y rotation every frame while gripping — prevents movement-controls
+        // from applying right-stick turn while the user is spinning a building
+        if (this._playerRotLock !== null && this._rigEl) {
+          this._rigEl.object3D.rotation.y = this._playerRotLock;
+        }
+
         try {
 
         // ── Hover: bbox check every 12 frames — always on so hovered is
@@ -786,8 +797,8 @@
             var t = -this._tickOrigin.y / this._tickDir.y;
             if (t > 0.3) {
               this.groundPt.copy(this._tickOrigin).addScaledVector(this._tickDir, t);
-              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.18;
-              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.18;
+              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.07;
+              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.07;
             }
           }
         }
@@ -891,10 +902,54 @@
       }
     };
 
-    // Wire up the world button (gaze fuse fires 'click')
+    // Wire up buttons (gaze fuse fires 'click')
     document.addEventListener('DOMContentLoaded', function () {
-      var btn = document.querySelector('#night-btn');
-      if (btn) btn.addEventListener('click', window.toggleNight);
+      // Night toggle
+      var nightBtn = document.querySelector('#night-btn');
+      if (nightBtn) nightBtn.addEventListener('click', window.toggleNight);
+
+      // Reset map — two-gaze confirmation
+      var resetBtn  = document.querySelector('#reset-btn');
+      var resetLbl  = document.querySelector('#reset-lbl');
+      var _pending  = false;
+      var _cancelT  = null;
+
+      function cancelReset() {
+        _pending = false;
+        clearTimeout(_cancelT);
+        if (resetBtn) resetBtn.setAttribute('material', 'color:#221111; emissive:#aa1111; emissiveIntensity:1; shader:flat');
+        if (resetLbl) resetLbl.setAttribute('text', 'value: RESET MAP');
+      }
+
+      function doReset() {
+        var originals = window._placerOriginals || {};
+        document.querySelectorAll('.placeable').forEach(function (el) {
+          var id   = el.getAttribute('data-name');
+          var orig = originals[id];
+          if (!orig) return;
+          el.object3D.position.set(orig.x, orig.y || 0, orig.z);
+          el.object3D.rotation.y = orig.rotY || 0;
+          el.object3D.scale.setScalar(orig.scale);
+        });
+        try { localStorage.removeItem('blitz-layout'); } catch(e) {}
+        cancelReset();
+      }
+
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+          if (!_pending) {
+            // First gaze — ask for confirmation
+            _pending = true;
+            resetBtn.setAttribute('material', 'color:#552200; emissive:#ff5500; emissiveIntensity:1; shader:flat');
+            if (resetLbl) resetLbl.setAttribute('text', 'value: ARE YOU SURE?\nlook again to confirm');
+            // Auto-cancel after 6s if user looks away
+            _cancelT = setTimeout(cancelReset, 6000);
+          } else {
+            // Second gaze — confirmed
+            doReset();
+          }
+        });
+      }
     });
 
     function unlockAudio() {
@@ -942,18 +997,31 @@
 
   <a-sky color="#87ceeb"></a-sky>
 
-  <!-- ═══ DAY / NIGHT toggle button — post to right of compass ring ═══ -->
+  <!-- ═══ DAY / NIGHT toggle button ═══ -->
   <a-entity position="5.5 0 -33">
-    <!-- post -->
     <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
            material="color:#223344; shader:flat"></a-box>
-    <!-- button face — gaze for 1.5s to toggle -->
     <a-box class="btn" id="night-btn"
            width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
            material="color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat">
     </a-box>
     <a-text value="DAY / NIGHT" position="0 1.4 0" align="center"
             color="#88ccff" width="2.5" material="shader:flat"></a-text>
+    <a-text value="(look 1.5s)" position="0 1.02 0" align="center"
+            color="#445566" width="2" material="shader:flat"></a-text>
+  </a-entity>
+
+  <!-- ═══ RESET MAP button — two-step confirmation ═══ -->
+  <a-entity position="8.2 0 -33">
+    <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
+           material="color:#223344; shader:flat"></a-box>
+    <!-- stage 1: normal state -->
+    <a-box class="btn" id="reset-btn"
+           width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
+           material="color:#221111; emissive:#aa1111; emissiveIntensity:1; shader:flat">
+    </a-box>
+    <a-text id="reset-lbl" value="RESET MAP" position="0 1.4 0" align="center"
+            color="#ffaaaa" width="2.5" material="shader:flat"></a-text>
     <a-text value="(look 1.5s)" position="0 1.02 0" align="center"
             color="#445566" width="2" material="shader:flat"></a-text>
   </a-entity>
