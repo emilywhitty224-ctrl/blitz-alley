@@ -417,6 +417,15 @@
           outText.setAttribute('text', 'value: ; color:#44ffaa; align:left; width:1.1; wrapCount:52');
           outText.setAttribute('visible', 'false');
           cam.appendChild(outText);
+
+          // ── Live readout — shows Y offset + scale while adjusting ───
+          var readout = document.createElement('a-entity');
+          readout.setAttribute('position', '0 -0.18 -0.55');
+          readout.setAttribute('text', 'value: ; color:#ffdd44; align:center; width:1.4');
+          readout.setAttribute('visible', 'false');
+          cam.appendChild(readout);
+          self.readout = readout;
+          self.readoutTimer = 0;
           self.outPanel = outPanel;
           self.outText  = outText;
 
@@ -461,6 +470,7 @@
             });
 
             rightCtrl.addEventListener('thumbstickmoved', function (e) {
+              self.stickX = e.detail.x;  // right stick X → spin (only active while gripping)
               self.scaleY = e.detail.y;  // right stick Y → scale
             });
           }
@@ -468,8 +478,7 @@
           // ── Left controller ──────────────────────────────────────
           if (leftCtrl) {
             leftCtrl.addEventListener('thumbstickmoved', function (e) {
-              self.stickX  = e.detail.x;  // left stick X → spin (no conflict with movement-controls turn)
-              self.heightY = e.detail.y;  // left stick Y → height (push into / pull out of ground)
+              self.heightY = e.detail.y;  // left stick Y → height only (dedicated axis, no spin bleed)
             });
 
             // Left stick CLICK → undo last move
@@ -662,12 +671,7 @@
             }
           } catch (e) {}
 
-          // ── Night toggle (left trigger — same as world button) ───────
-          if (leftCtrl) {
-            leftCtrl.addEventListener('triggerdown', function () {
-              if (window.toggleNight) window.toggleNight();
-            });
-          }
+          // Left trigger is free — night toggle is on the physical world button
 
           // ── Right A: floor snap | Right thumbstick click: clone ───────
           if (rightCtrl) {
@@ -736,20 +740,47 @@
           }
         }
 
-        // ── Spin — left stick X, only when trigger NOT held ────────────
+        // ── Spin — right stick X, only when trigger NOT held ──────────
+        // Right stick is only read inside vr-placer while gripping,
+        // so movement-controls turn only fires when the laser is off.
         if (!this.moving && Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
 
-        // ── Height — left stick Y: push into / pull out of ground ───────
+        // ── Height — left stick Y: raise / lower for floor matching ────
+        // Proportional rate: small push = fine 2mm/frame, full push = 7mm/frame
+        var adjusting = false;
         if (Math.abs(this.heightY) > 0.15) {
           this.held.object3D.position.y += this.heightY * 0.007;
+          adjusting = true;
         }
 
-        // ── Scale — right stick Y: stick up = bigger, stick down = smaller
+        // ── Scale — right stick Y: up = bigger, down = smaller ─────────
         if (Math.abs(this.scaleY) > 0.15) {
           var ns = Math.max(0.02, this.held.object3D.scale.x + this.scaleY * 0.002);
           this.held.object3D.scale.setScalar(ns);
+          adjusting = true;
+        }
+
+        // ── Live readout — Y offset + scale, shown while adjusting ─────
+        // Updates every 6 frames to avoid text-reflow every frame
+        if (this.readout) {
+          if (adjusting) {
+            this.readoutTimer = 90; // stay visible ~1.25s after last adjustment
+          }
+          if (this.readoutTimer > 0) {
+            this.readoutTimer--;
+            if (this.frameCount % 6 === 0) {
+              var yOff  = this.held.object3D.position.y.toFixed(2);
+              var yLbl  = yOff > 0 ? '+' + yOff : yOff;
+              var scLbl = this.held.object3D.scale.x.toFixed(3);
+              this.readout.setAttribute('text', 'value',
+                'floor offset  ' + yLbl + ' m\nscale  ' + scLbl);
+              this.readout.setAttribute('visible', 'true');
+            }
+          } else {
+            this.readout.setAttribute('visible', 'false');
+          }
         }
 
         } // end if (this.held)
@@ -868,9 +899,9 @@
   <a-box position="-3.5 0.02 -33" rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
 
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
-  <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="2.0"
+  <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="2.8"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move XZ&#10;STICK L/R (L)     spin&#10;STICK U/D (L)     push into ground&#10;STICK U/D (R)     scale up / down&#10;A (R)             snap to floor&#10;STICK CLICK (R)   clone building&#10;TRIGGER (L)       night preview&#10;STICK CLICK (L)   undo&#10;GRIP (L)          height post&#10;X (L)             lock / unlock&#10;Y (L)             save + export"
+  <a-text value="── RIGHT HAND ──&#10;GRIP          laser on / select&#10;+ TRIGGER     move building&#10;STICK L/R     spin&#10;STICK U/D     scale (up=big)&#10;STICK CLICK   clone&#10;A             snap to floor Y=0&#10;B             fly&#10;&#10;── LEFT HAND ──&#10;STICK U/D     raise / lower&#10;STICK CLICK   undo&#10;GRIP          height post&#10;X             lock / unlock&#10;Y             save + export&#10;&#10;── WORLD ──&#10;DAY/NIGHT btn gaze 1.5s"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
