@@ -488,6 +488,14 @@
           color="#00ffcc" width="4" align="center"
           material="shader:flat"></a-text>
 
+  <!-- ── Controls board — small, flat on the ground beside the ring ── -->
+  <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
+           material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
+  <a-text value="GRIP (R)      grab + drag&#10;STICK L/R (R) rotate&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
+          position="2.2 0.03 -33" rotation="-90 0 -0"
+          color="#aaffdd" width="2.0" align="left" wrap-count="28"
+          material="shader:flat"></a-text>
+
   <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
   <a-entity class="placeable" data-name="gatehouse" id="b-gatehouse"
     gltf-model="#gatehouse-glb"
