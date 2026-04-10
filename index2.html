@@ -110,55 +110,9 @@
     });
 
     // ── VICTORIAN NIGHT TINT ────────────────────────────────────────────
-    // Runs after the Victorian GLB loads.
-    // Wall/brick surfaces get the brown_brick_diffuse.jpg texture + night tint.
-    // Glass/metal surfaces get a dark amber glow treatment instead.
-    AFRAME.registerComponent('victorian-night', {
-      init: function () {
-        this.el.addEventListener('model-loaded', function (e) {
-          // Load the brick texture
-          var brickTex = new THREE.TextureLoader().load('brown_brick_diffuse.jpg');
-          brickTex.wrapS = THREE.RepeatWrapping;
-          brickTex.wrapT = THREE.RepeatWrapping;
-          brickTex.repeat.set(1, 1);
-          // Correct colour space (works across Three.js r140–r160+)
-          if (THREE.SRGBColorSpace !== undefined) {
-            brickTex.colorSpace = THREE.SRGBColorSpace;
-          } else {
-            brickTex.encoding = THREE.sRGBEncoding;
-          }
-
-          var nightCol = new THREE.Color(0x1a1208);  // very dark warm brown
-
-          e.detail.model.traverse(function (node) {
-            if (!node.isMesh) return;
-            var mats = Array.isArray(node.material) ? node.material : [node.material];
-            mats.forEach(function (mat) {
-              if (!mat) return;
-              // Only treat as glass if explicitly transparent — photogrammetry
-              // walls are often bright but are not glass, so don't use brightness
-              var isGlass = mat.transparent === true && mat.opacity < 0.8;
-
-              if (isGlass) {
-                // Transparent surface — keep near-black with faint amber leak
-                mat.color.set(0x0a0804);
-                mat.emissive = mat.emissive || new THREE.Color(0x000000);
-                mat.emissive.set(0x1a0a00);
-                mat.emissiveIntensity = 0.35;
-                mat.roughness = 0.15;
-              } else {
-                // Wall / brick / plaster — apply brick texture with night tint
-                mat.map = brickTex;
-                mat.color.set(0xffffff);
-                mat.color.lerp(nightCol, 0.45);
-                mat.roughness = Math.min((mat.roughness || 0.8) + 0.15, 1.0);
-              }
-              mat.needsUpdate = true;
-            });
-          });
-        });
-      }
-    });
+    // victorian-night component — texture removed, original GLB materials used as-is.
+    // Kept as a no-op so the attribute on the entity doesn't cause errors.
+    AFRAME.registerComponent('victorian-night', { init: function () {} });
 
     // ── COORD CAPTURE ───────────────────────────────────────────────────
     // RIGHT trigger: capture controller XYZ (up to 5, listed on HUD).
