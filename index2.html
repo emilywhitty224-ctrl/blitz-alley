@@ -319,12 +319,14 @@
 
   <script>
     // ── VR PLACER ────────────────────────────────────────────────────────
-    // Right GRIP          : laser on + select building
-    // Right GRIP + TRIGGER: move selected building along ground (smooth)
-    // Right STICK L/R     : spin building (movement disabled while gripping)
-    // Left  STICK U/D     : scale building
-    // Left  GRIP          : stamp 5'8" height post
-    // Left  Y             : toggle position export HUD
+    // Right GRIP              : laser on + select building
+    // Right GRIP + TRIGGER    : move selected building (smooth)
+    // Right STICK L/R         : spin building
+    // Left  STICK U/D         : scale building
+    // Left  STICK click       : undo last move
+    // Left  GRIP (alone)      : stamp 5'8" height post
+    // Left  GRIP (while R gripping): reset building to original position
+    // Left  Y                 : export positions + copy to clipboard
     AFRAME.registerComponent('vr-placer', {
       init: function () {
         var self = this;
@@ -337,13 +339,47 @@
         self.tmpQuat    = new THREE.Quaternion();
         self.groundPt   = new THREE.Vector3();
         self.laserPivot = null;
+        self.hovered    = null;
+        self.history    = []; // undo stack [{el, x, z, rotY, scale}]
+        self.originals  = {}; // reset map keyed by data-name
 
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
+          var rigEl     = document.querySelector('#rig');
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
 
-          // ── Laser pivot — tilted 45° down so it points at the ground ─
+          // ── Store original positions for reset ───────────────────
+          requestAnimationFrame(function () {
+            document.querySelectorAll('.placeable').forEach(function (el) {
+              var id = el.getAttribute('data-name');
+              var p  = el.object3D.position;
+              self.originals[id] = {
+                x: p.x, z: p.z,
+                rotY: el.object3D.rotation.y,
+                scale: el.object3D.scale.x
+              };
+            });
+          });
+
+          // ── Helpers: highlight / unhighlight ────────────────────
+          function setHighlight(el, on) {
+            if (!el) return;
+            el.object3D.traverse(function (node) {
+              if (!node.isMesh) return;
+              var mats = Array.isArray(node.material) ? node.material : [node.material];
+              mats.forEach(function (mat) {
+                if (on) {
+                  if (!mat._origEmissive) mat._origEmissive = mat.emissive.clone();
+                  mat.emissive.setRGB(0.18, 0.18, 0.05);
+                } else {
+                  if (mat._origEmissive) mat.emissive.copy(mat._origEmissive);
+                }
+              });
+            });
+          }
+
+          // ── Laser pivot — tilted 45° down ────────────────────────
           var laserPivot = document.createElement('a-entity');
           laserPivot.setAttribute('rotation', '-45 0 0');
           laserPivot.setAttribute('visible', 'false');
@@ -358,7 +394,7 @@
           self.laser      = laser;
           self.laserPivot = laserPivot;
 
-          // ── Output HUD ──────────────────────────────────────────────
+          // ── Output HUD ──────────────────────────────────────────
           var outPanel = document.createElement('a-plane');
           outPanel.setAttribute('position', '0 0.08 -0.6');
           outPanel.setAttribute('width',  '1.1');
@@ -377,42 +413,26 @@
 
           // ── Right controller ─────────────────────────────────────
           if (rightCtrl) {
-            var rigEl = document.querySelector('#rig');
-
-            // GRIP DOWN — laser on, raycast to select building
             rightCtrl.addEventListener('gripdown', function () {
               self.gripping = true;
               laserPivot.setAttribute('visible', 'true');
-
-              // Ray from tilted pivot
-              var origin = new THREE.Vector3();
-              var dir    = new THREE.Vector3(0, 0, -1);
-              laserPivot.object3D.getWorldPosition(origin);
-              laserPivot.object3D.getWorldQuaternion(self.tmpQuat);
-              dir.applyQuaternion(self.tmpQuat).normalize();
-              self.raycaster.set(origin, dir);
-
-              var meshes = [], elMap = [];
-              document.querySelectorAll('.placeable').forEach(function (el) {
-                el.object3D.traverse(function (node) {
-                  if (node.isMesh) { meshes.push(node); elMap.push({ mesh: node, el: el }); }
-                });
-              });
-
-              var hits = self.raycaster.intersectObjects(meshes, false);
-              if (hits.length > 0) {
-                var hitMesh = hits[0].object;
-                for (var i = 0; i < elMap.length; i++) {
-                  if (elMap[i].mesh === hitMesh) { self.held = elMap[i].el; break; }
-                }
-              }
-
-              // Disable movement so right stick only spins
               if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: false');
+              // selection happens in tick via hover — held = hovered on grip
+              if (self.hovered) {
+                // save to undo history before moving
+                self.history.push({
+                  el:    self.hovered,
+                  x:     self.hovered.object3D.position.x,
+                  z:     self.hovered.object3D.position.z,
+                  rotY:  self.hovered.object3D.rotation.y,
+                  scale: self.hovered.object3D.scale.x
+                });
+                self.held = self.hovered;
+              }
             });
 
-            // GRIP UP — laser off, release building, re-enable movement
             rightCtrl.addEventListener('gripup', function () {
+              if (self.held) setHighlight(self.held, false);
               self.gripping = false;
               self.moving   = false;
               self.held     = null;
@@ -421,9 +441,8 @@
               if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: true');
             });
 
-            // TRIGGER — move only while grip is also held
             rightCtrl.addEventListener('triggerdown', function () {
-              if (self.gripping) self.moving = true;
+              if (self.gripping && self.held) self.moving = true;
             });
             rightCtrl.addEventListener('triggerup', function () {
               self.moving = false;
@@ -434,61 +453,63 @@
             });
           }
 
-          // Left thumbstick Y → scale held building (no movement conflict)
-          // Left GRIP → stamp a 5'8" (1.73 m) height reference post at controller position
+          // ── Left controller ──────────────────────────────────────
           if (leftCtrl) {
             leftCtrl.addEventListener('thumbstickmoved', function (e) {
               self.scaleY = e.detail.y;
             });
 
-            leftCtrl.addEventListener('gripdown', function () {
-              var p = new THREE.Vector3();
-              leftCtrl.object3D.getWorldPosition(p);
-
-              var post = document.createElement('a-entity');
-              post.setAttribute('position', p.x + ' 0 ' + p.z);
-
-              // Thin dark pole
-              var pole = document.createElement('a-box');
-              pole.setAttribute('width',  '0.04');
-              pole.setAttribute('height', '1.73');
-              pole.setAttribute('depth',  '0.04');
-              pole.setAttribute('position', '0 0.865 0');
-              pole.setAttribute('material', 'color:#ffee44; emissive:#ffcc00; emissiveIntensity:0.8; shader:flat; opacity:0.85; transparent:true');
-              post.appendChild(pole);
-
-              // Top cap
-              var cap = document.createElement('a-sphere');
-              cap.setAttribute('radius', '0.06');
-              cap.setAttribute('position', '0 1.73 0');
-              cap.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
-              post.appendChild(cap);
-
-              // Crossbar at 1.73 m
-              var bar = document.createElement('a-box');
-              bar.setAttribute('width',  '0.5');
-              bar.setAttribute('height', '0.03');
-              bar.setAttribute('depth',  '0.03');
-              bar.setAttribute('position', '0 1.73 0');
-              bar.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
-              post.appendChild(bar);
-
-              // Label
-              var lbl = document.createElement('a-text');
-              lbl.setAttribute('value', "5'8\" / 1.73m");
-              lbl.setAttribute('position', '0.3 1.73 0');
-              lbl.setAttribute('color', '#ffffff');
-              lbl.setAttribute('width', '1.8');
-              lbl.setAttribute('align', 'left');
-              lbl.setAttribute('material', 'shader:flat');
-              post.appendChild(lbl);
-
-              self.el.sceneEl.appendChild(post);
+            // Left stick CLICK → undo last move
+            leftCtrl.addEventListener('thumbstickdown', function () {
+              if (self.history.length === 0) return;
+              var last = self.history.pop();
+              last.el.object3D.position.x  = last.x;
+              last.el.object3D.position.z  = last.z;
+              last.el.object3D.rotation.y  = last.rotY;
+              last.el.object3D.scale.setScalar(last.scale);
             });
-          }
 
-          // ── Y button — toggle export HUD ────────────────────────
-          if (leftCtrl) {
+            // Left GRIP — stamp height post OR reset building if right gripping
+            leftCtrl.addEventListener('gripdown', function () {
+              if (self.gripping && self.held) {
+                // Reset to original position
+                var id   = self.held.getAttribute('data-name');
+                var orig = self.originals[id];
+                if (orig) {
+                  self.held.object3D.position.x = orig.x;
+                  self.held.object3D.position.z = orig.z;
+                  self.held.object3D.rotation.y = orig.rotY;
+                  self.held.object3D.scale.setScalar(orig.scale);
+                }
+              } else {
+                // Stamp 5'8" height post
+                var p = new THREE.Vector3();
+                leftCtrl.object3D.getWorldPosition(p);
+                var post = document.createElement('a-entity');
+                post.setAttribute('position', p.x + ' 0 ' + p.z);
+                var pole = document.createElement('a-box');
+                pole.setAttribute('width', '0.04'); pole.setAttribute('height', '1.73'); pole.setAttribute('depth', '0.04');
+                pole.setAttribute('position', '0 0.865 0');
+                pole.setAttribute('material', 'color:#ffee44; emissive:#ffcc00; emissiveIntensity:0.8; shader:flat; opacity:0.85; transparent:true');
+                post.appendChild(pole);
+                var cap = document.createElement('a-sphere');
+                cap.setAttribute('radius', '0.06'); cap.setAttribute('position', '0 1.73 0');
+                cap.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
+                post.appendChild(cap);
+                var bar = document.createElement('a-box');
+                bar.setAttribute('width', '0.5'); bar.setAttribute('height', '0.03'); bar.setAttribute('depth', '0.03');
+                bar.setAttribute('position', '0 1.73 0');
+                bar.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
+                post.appendChild(bar);
+                var lbl = document.createElement('a-text');
+                lbl.setAttribute('value', "5'8\" / 1.73m"); lbl.setAttribute('position', '0.3 1.73 0');
+                lbl.setAttribute('color', '#ffffff'); lbl.setAttribute('width', '1.8'); lbl.setAttribute('align', 'left');
+                post.appendChild(lbl);
+                self.el.sceneEl.appendChild(post);
+              }
+            });
+
+            // Y button — export positions + copy to clipboard
             leftCtrl.addEventListener('ybuttondown', function () {
               var vis = outPanel.getAttribute('visible');
               if (vis === 'true' || vis === true) {
@@ -510,6 +531,8 @@
               outText.setAttribute('text', 'value', lines);
               outPanel.setAttribute('visible', 'true');
               outText.setAttribute('visible',  'true');
+              // Auto-copy to clipboard
+              if (navigator.clipboard) navigator.clipboard.writeText(lines).catch(function(){});
             });
           }
 
@@ -526,41 +549,77 @@
             lbl.setAttribute('material', 'shader:flat');
             el.appendChild(lbl);
           });
+
+          self._setHighlight = setHighlight;
         });
       },
 
       tick: function () {
-        if (!this.held || !this.laserPivot) return;
+        if (!this.laserPivot || !this._setHighlight) return;
 
-        // ── Move: only when trigger is also held ─────────────────
-        if (this.moving) {
+        // ── Live hover: cast ray every frame when laser is on ────
+        if (this.gripping) {
           var origin = new THREE.Vector3();
           var dir    = new THREE.Vector3(0, 0, -1);
           this.laserPivot.object3D.getWorldPosition(origin);
           this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
           dir.applyQuaternion(this.tmpQuat).normalize();
+          this.raycaster.set(origin, dir);
 
-          if (dir.y < -0.001) { // ray must point downward to hit ground
-            var t = -origin.y / dir.y;
+          var meshes = [], elMap = [];
+          document.querySelectorAll('.placeable').forEach(function (el) {
+            el.object3D.traverse(function (node) {
+              if (node.isMesh) { meshes.push(node); elMap.push({ mesh: node, el: el }); }
+            });
+          });
+
+          var hits = this.raycaster.intersectObjects(meshes, false);
+          var newHovered = null;
+          if (hits.length > 0) {
+            var hitMesh = hits[0].object;
+            for (var i = 0; i < elMap.length; i++) {
+              if (elMap[i].mesh === hitMesh) { newHovered = elMap[i].el; break; }
+            }
+          }
+
+          // Update highlight if hovered target changed
+          if (newHovered !== this.hovered) {
+            if (this.hovered && this.hovered !== this.held) this._setHighlight(this.hovered, false);
+            this.hovered = newHovered;
+            if (this.hovered) this._setHighlight(this.hovered, true);
+          }
+
+          // On gripdown the held was set from hovered — keep highlight on held
+        }
+
+        if (!this.held) return;
+
+        // ── Move: grip + trigger ─────────────────────────────────
+        if (this.moving) {
+          var o2  = new THREE.Vector3();
+          var d2  = new THREE.Vector3(0, 0, -1);
+          this.laserPivot.object3D.getWorldPosition(o2);
+          this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
+          d2.applyQuaternion(this.tmpQuat).normalize();
+          if (d2.y < -0.001) {
+            var t = -o2.y / d2.y;
             if (t > 0.3) {
-              this.groundPt.copy(origin).addScaledVector(dir, t);
-              // Smooth lerp — glides rather than snapping
+              this.groundPt.copy(o2).addScaledVector(d2, t);
               this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.18;
               this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.18;
             }
           }
         }
 
-        // ── Spin: right stick X (movement disabled so no conflict) ─
+        // ── Spin ─────────────────────────────────────────────────
         if (Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
 
-        // ── Scale: left stick Y ──────────────────────────────────
+        // ── Scale ────────────────────────────────────────────────
         if (Math.abs(this.scaleY) > 0.15) {
-          var sc = this.held.object3D.scale;
-          var ns = Math.max(0.05, sc.x - this.scaleY * 0.003);
-          sc.set(ns, ns, ns);
+          var ns = Math.max(0.05, this.held.object3D.scale.x - this.scaleY * 0.003);
+          this.held.object3D.scale.setScalar(ns);
         }
       }
     });
@@ -627,10 +686,23 @@
           color="#00ffcc" width="4" align="center"
           material="shader:flat"></a-text>
 
+  <!-- ── Compass rose — flat on ground around ground zero ── -->
+  <a-torus position="0 0.01 -33" rotation="-90 0 0" radius="3.5" radius-tubular="0.03"
+           material="color:#334455; emissive:#223344; emissiveIntensity:0.5; shader:flat; opacity:0.6; transparent:true"></a-torus>
+  <a-text value="N" position="0 0.02 -36.6"  rotation="-90 0 0" color="#ff4444" width="3" align="center" material="shader:flat"></a-text>
+  <a-text value="S" position="0 0.02 -29.4"  rotation="-90 0 0" color="#ff4444" width="3" align="center" material="shader:flat"></a-text>
+  <a-text value="E" position="3.6 0.02 -33"  rotation="-90 0 0" color="#aaaaff" width="3" align="center" material="shader:flat"></a-text>
+  <a-text value="W" position="-3.6 0.02 -33" rotation="-90 0 0" color="#aaaaff" width="3" align="center" material="shader:flat"></a-text>
+  <!-- Tick lines at cardinal points -->
+  <a-box position="0 0.02 -36.5"  rotation="-90 0 0"   width="0.08" height="0.5" depth="0.02" material="color:#ff4444; shader:flat"></a-box>
+  <a-box position="0 0.02 -29.5"  rotation="-90 0 0"   width="0.08" height="0.5" depth="0.02" material="color:#ff4444; shader:flat"></a-box>
+  <a-box position="3.5 0.02 -33"  rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
+  <a-box position="-3.5 0.02 -33" rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
+
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)         laser on + select&#10;GRIP+TRIGGER (R) move building&#10;STICK L/R (R)    spin&#10;STICK U/D (L)    scale&#10;GRIP (L)         stamp height post&#10;Y (L)            export positions&#10;B (R)            fly / land&#10;X (L)            cal markers&#10;STICK↓ (R)       capture coord"
+  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move building&#10;STICK L/R (R)     spin&#10;STICK U/D (L)     scale&#10;STICK CLICK (L)   undo last move&#10;GRIP (L)          stamp height post&#10;GRIP (L)+GRIP (R) reset building&#10;Y (L)             export + copy&#10;B (R)             fly / land&#10;X (L)             cal markers&#10;STICK↓ (R)        capture coord"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
