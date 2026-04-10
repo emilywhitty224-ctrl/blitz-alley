@@ -328,7 +328,7 @@
         var self = this;
         self.held      = null;
         self.stickX    = 0;
-        self.stickY    = 0;
+        self.scaleY    = 0;
         self.raycaster = new THREE.Raycaster();
         self.tmpVec    = new THREE.Vector3();
         self.tmpQuat   = new THREE.Quaternion();
@@ -352,16 +352,16 @@
 
           // ── Output HUD ──────────────────────────────────────────────
           var outPanel = document.createElement('a-plane');
-          outPanel.setAttribute('position', '-0.38 0.05 -0.55');
-          outPanel.setAttribute('width',  '0.72');
-          outPanel.setAttribute('height', '0.60');
-          outPanel.setAttribute('material', 'color:#000811; opacity:0.9; transparent:true; shader:flat');
+          outPanel.setAttribute('position', '0 0.08 -0.6');
+          outPanel.setAttribute('width',  '1.1');
+          outPanel.setAttribute('height', '0.72');
+          outPanel.setAttribute('material', 'color:#000811; opacity:0.92; transparent:true; shader:flat');
           outPanel.setAttribute('visible', 'false');
           cam.appendChild(outPanel);
 
           var outText = document.createElement('a-entity');
-          outText.setAttribute('position', '-0.72 0.30 -0.54');
-          outText.setAttribute('text', 'value: ; color:#44ffaa; align:left; width:0.9; wrapCount:38');
+          outText.setAttribute('position', '-0.52 0.42 -0.59');
+          outText.setAttribute('text', 'value: ; color:#44ffaa; align:left; width:1.1; wrapCount:52');
           outText.setAttribute('visible', 'false');
           cam.appendChild(outText);
           self.outPanel = outPanel;
@@ -402,12 +402,18 @@
               laser.setAttribute('visible', 'false');
               self.held   = null;
               self.stickX = 0;
-              self.stickY = 0;
+              self.scaleY = 0;
             });
 
             rightCtrl.addEventListener('thumbstickmoved', function (e) {
               self.stickX = e.detail.x;
-              self.stickY = e.detail.y;
+            });
+          }
+
+          // Left thumbstick Y → scale held building (no movement conflict)
+          if (leftCtrl) {
+            leftCtrl.addEventListener('thumbstickmoved', function (e) {
+              self.scaleY = e.detail.y;
             });
           }
 
@@ -420,14 +426,16 @@
                 outText.setAttribute('visible',  'false');
                 return;
               }
-              var lines = 'BUILDING POSITIONS\n';
+              var lines = '── PASTE INTO HTML ──\n';
               document.querySelectorAll('.placeable').forEach(function (el) {
                 var p  = el.object3D.position;
                 var sc = el.object3D.scale.x.toFixed(3);
                 var ry = Math.round(THREE.MathUtils.radToDeg(el.object3D.rotation.y));
                 var id = el.getAttribute('data-name') || '?';
-                lines += id + '\n X:' + p.x.toFixed(2) + ' Z:' + p.z.toFixed(2) +
-                         ' R:' + ry + ' S:' + sc + '\n';
+                lines += id + '\n';
+                lines += 'pos="' + p.x.toFixed(2) + ' 0 ' + p.z.toFixed(2) + '"\n';
+                lines += 'rot="0 ' + ry + ' 0"\n';
+                lines += 'scale="' + sc + ' ' + sc + ' ' + sc + '"\n\n';
               });
               outText.setAttribute('text', 'value', lines);
               outPanel.setAttribute('visible', 'true');
@@ -478,10 +486,10 @@
         if (Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.025;
         }
-        // Thumbstick Y → scale
-        if (Math.abs(this.stickY) > 0.15) {
+        // Left stick Y → scale (up = bigger, down = smaller)
+        if (Math.abs(this.scaleY) > 0.15) {
           var sc = this.held.object3D.scale;
-          var ns = Math.max(0.05, sc.x - this.stickY * 0.002);
+          var ns = Math.max(0.05, sc.x - this.scaleY * 0.003);
           sc.set(ns, ns, ns);
         }
       }
@@ -552,7 +560,7 @@
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)      laser grab + drag&#10;STICK L/R (R) rotate&#10;STICK U/D (R) scale&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
+  <a-text value="GRIP (R)      laser grab + drag&#10;STICK L/R (R) rotate&#10;STICK U/D (L) scale&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
