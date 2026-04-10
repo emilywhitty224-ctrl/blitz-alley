@@ -344,6 +344,7 @@
         self.originals  = {};
         self.bboxCache  = {};
         self.frameCount = 0;
+        self.locked     = {}; // keyed by data-name, value = lock indicator el
         // Pre-allocate tick vectors — never new() inside tick
         self._tickOrigin = new THREE.Vector3();
         self._tickDir    = new THREE.Vector3();
@@ -419,8 +420,10 @@
               self.gripping = true;
               laserPivot.setAttribute('visible', 'true');
               if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: false');
-              // Use whatever was hovered (from cheap bbox check) as the held target
               if (self.hovered) {
+                var hovId = self.hovered.getAttribute('data-name');
+                var lockEntry = self.locked[hovId];
+                if (lockEntry && lockEntry.state) return; // locked — can't grab
                 self.history.push({
                   el:    self.hovered,
                   x:     self.hovered.object3D.position.x,
@@ -538,9 +541,30 @@
               // Auto-copy to clipboard
               if (navigator.clipboard) navigator.clipboard.writeText(lines).catch(function(){});
             });
+
+            // X button — lock / unlock the hovered or held building
+            leftCtrl.addEventListener('xbuttondown', function () {
+              var target = self.held || self.hovered;
+              if (!target) return;
+              var id    = target.getAttribute('data-name');
+              var entry = self.locked[id];
+              if (!entry) return;
+              entry.state = !entry.state;
+              entry.icon.setAttribute('visible', entry.state ? 'true' : 'false');
+              // If we just locked the held building, release it
+              if (entry.state && self.held === target) {
+                rebuildBbox(self.held);
+                self.gripping = false;
+                self.moving   = false;
+                self.held     = null;
+                self.stickX   = 0;
+                laserPivot.setAttribute('visible', 'false');
+                if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: true');
+              }
+            });
           }
 
-          // ── Floating name labels above each building ─────────────
+          // ── Floating name labels + lock indicators above each building ──
           document.querySelectorAll('.placeable').forEach(function (el) {
             var name = el.getAttribute('data-name') || '';
             if (!name) return;
@@ -552,6 +576,32 @@
             lbl.setAttribute('width', '12');
             lbl.setAttribute('material', 'shader:flat');
             el.appendChild(lbl);
+
+            // Lock indicator: red padlock icon (box + smaller box) above building
+            var lockIcon = document.createElement('a-entity');
+            lockIcon.setAttribute('position', '0 10 0');
+            lockIcon.setAttribute('visible', 'false');
+            var lockBody = document.createElement('a-box');
+            lockBody.setAttribute('width', '0.6'); lockBody.setAttribute('height', '0.5'); lockBody.setAttribute('depth', '0.3');
+            lockBody.setAttribute('position', '0 0 0');
+            lockBody.setAttribute('material', 'color:#ff3333; emissive:#ff2222; emissiveIntensity:1; shader:flat');
+            var lockShackle = document.createElement('a-torus');
+            lockShackle.setAttribute('radius', '0.22'); lockShackle.setAttribute('radius-tubular', '0.07');
+            lockShackle.setAttribute('arc', '180');
+            lockShackle.setAttribute('position', '0 0.32 0');
+            lockShackle.setAttribute('material', 'color:#ff3333; emissive:#ff2222; emissiveIntensity:1; shader:flat');
+            var lockLbl = document.createElement('a-text');
+            lockLbl.setAttribute('value', 'LOCKED');
+            lockLbl.setAttribute('position', '0 -0.6 0');
+            lockLbl.setAttribute('align', 'center');
+            lockLbl.setAttribute('color', '#ff3333');
+            lockLbl.setAttribute('width', '5');
+            lockLbl.setAttribute('material', 'shader:flat');
+            lockIcon.appendChild(lockBody);
+            lockIcon.appendChild(lockShackle);
+            lockIcon.appendChild(lockLbl);
+            el.appendChild(lockIcon);
+            self.locked[name] = { el: el, icon: lockIcon, state: false };
           });
 
         });
@@ -664,7 +714,7 @@
            position="0 3 -50" fire-flicker></a-light>
 
   <!-- ═══ GROUND ═══ -->
-  <a-plane position="0 0 -40" rotation="-90 0 0" width="120" height="120"
+  <a-plane position="30 0 -45" rotation="-90 0 0" width="240" height="160"
            material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
 
   <a-sky color="#87ceeb"></a-sky>
@@ -693,7 +743,7 @@
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move building&#10;STICK L/R (R)     spin&#10;STICK U/D (L)     scale&#10;STICK CLICK (L)   undo last move&#10;GRIP (L)          stamp height post&#10;GRIP (L)+GRIP (R) reset building&#10;Y (L)             export + copy&#10;B (R)             fly / land&#10;X (L)             cal markers&#10;STICK↓ (R)        capture coord"
+  <a-text value="GRIP (R)          laser + select&#10;GRIP+TRIGGER (R)  move building&#10;STICK L/R (R)     spin&#10;STICK U/D (L)     scale&#10;STICK CLICK (L)   undo last move&#10;GRIP (L)          stamp height post&#10;GRIP (L)+GRIP (R) reset building&#10;X (L)             lock / unlock&#10;Y (L)             export + copy"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
