@@ -343,8 +343,9 @@
         self.history    = [];
         self.originals  = {};
         self.bboxCache  = {};
+        self.bboxKeys   = []; // flat array of cache keys, updated by rebuildBbox — no Object.keys in tick
         self.frameCount = 0;
-        self.locked     = {}; // keyed by data-name, value = lock indicator el
+        self.locked     = {};
         // Pre-allocate tick vectors — never new() inside tick
         self._tickOrigin = new THREE.Vector3();
         self._tickDir    = new THREE.Vector3();
@@ -362,6 +363,8 @@
             var id  = el.getAttribute('data-name');
             var box = new THREE.Box3().setFromObject(el.object3D);
             self.bboxCache[id] = { el: el, box: box, lastPos: el.object3D.position.clone() };
+            // Keep flat array in sync — tick uses this instead of Object.keys each frame
+            self.bboxKeys = Object.keys(self.bboxCache);
           }
           // Rebuild cache when any model finishes loading
           document.querySelectorAll('.placeable').forEach(function (el) {
@@ -606,8 +609,10 @@
         if (!this.laserPivot) return;
         this.frameCount++;
 
+        try {
+
         // ── Hover: bbox check every 12 frames while gripping ────────────
-        // No mesh traversal, no new() allocations — all objects pre-allocated in init.
+        // Plain for-loop, pre-cached keys array, no Object.keys/bind/new in hot path.
         if (this.gripping && this.frameCount % 12 === 0) {
           this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
           this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
@@ -616,28 +621,28 @@
 
           var newHovered = null;
           var bestDist   = Infinity;
+          var keys       = this.bboxKeys;
           var cache      = this.bboxCache;
           var origin     = this._tickOrigin;
           var dist       = this._tickDist;
           var tmpBox     = this._tmpBox;
-          Object.keys(cache).forEach(function (id) {
-            var entry = cache[id];
+          for (var i = 0; i < keys.length; i++) {
+            var entry = cache[keys[i]];
+            if (!entry || !entry.el) continue;
             var cur   = entry.el.object3D.position;
             var last  = entry.lastPos;
             tmpBox.copy(entry.box);
-            var dx = cur.x - last.x, dz = cur.z - last.z;
-            tmpBox.min.x += dx; tmpBox.min.z += dz;
-            tmpBox.max.x += dx; tmpBox.max.z += dz;
+            tmpBox.min.x += cur.x - last.x; tmpBox.min.z += cur.z - last.z;
+            tmpBox.max.x += cur.x - last.x; tmpBox.max.z += cur.z - last.z;
             if (this.raycaster.ray.intersectBox(tmpBox, dist) !== null) {
               var d = origin.distanceTo(dist);
               if (d < bestDist) { bestDist = d; newHovered = entry.el; }
             }
-          }.bind(this));
+          }
           this.hovered = newHovered;
-          // No setHighlight — traversing photogrammetry materials crashes Quest
         }
 
-        if (!this.held) return;
+        if (!this.held) { } else {
 
         // ── Move: grip + trigger ────────────────────────────────────────
         if (this.moving) {
@@ -664,6 +669,9 @@
           var ns = Math.max(0.05, this.held.object3D.scale.x - this.scaleY * 0.003);
           this.held.object3D.scale.setScalar(ns);
         }
+
+        } // end if (this.held)
+        } catch (e) { console.error('vr-placer tick error:', e); }
       }
     });
   </script>
