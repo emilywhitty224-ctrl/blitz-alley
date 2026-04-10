@@ -319,36 +319,44 @@
 
   <script>
     // ── VR PLACER ────────────────────────────────────────────────────────
-    // Right GRIP        : laser-select a building, drag it along the ground
-    // Stick L/R (right) : rotate held building
-    // Stick U/D (right) : scale held building up/down
-    // Y button (left)   : toggle position export HUD
+    // Right GRIP          : laser on + select building
+    // Right GRIP + TRIGGER: move selected building along ground (smooth)
+    // Right STICK L/R     : spin building (movement disabled while gripping)
+    // Left  STICK U/D     : scale building
+    // Left  GRIP          : stamp 5'8" height post
+    // Left  Y             : toggle position export HUD
     AFRAME.registerComponent('vr-placer', {
       init: function () {
         var self = this;
-        self.held      = null;
-        self.stickX    = 0;
-        self.scaleY    = 0;
-        self.raycaster = new THREE.Raycaster();
-        self.tmpVec    = new THREE.Vector3();
-        self.tmpQuat   = new THREE.Quaternion();
-        self.groundPt  = new THREE.Vector3();
+        self.held       = null;
+        self.gripping   = false;
+        self.moving     = false;
+        self.stickX     = 0;
+        self.scaleY     = 0;
+        self.raycaster  = new THREE.Raycaster();
+        self.tmpQuat    = new THREE.Quaternion();
+        self.groundPt   = new THREE.Vector3();
+        self.laserPivot = null;
 
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
 
-          // ── Laser line — child of right controller ───────────────
+          // ── Laser pivot — tilted 45° down so it points at the ground ─
+          var laserPivot = document.createElement('a-entity');
+          laserPivot.setAttribute('rotation', '-45 0 0');
+          laserPivot.setAttribute('visible', 'false');
           var laser = document.createElement('a-box');
           laser.setAttribute('width',  '0.005');
           laser.setAttribute('height', '0.005');
           laser.setAttribute('depth',  '20');
           laser.setAttribute('position', '0 0 -10');
           laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
-          laser.setAttribute('visible', 'false');
-          if (rightCtrl) rightCtrl.appendChild(laser);
-          self.laser = laser;
+          laserPivot.appendChild(laser);
+          if (rightCtrl) rightCtrl.appendChild(laserPivot);
+          self.laser      = laser;
+          self.laserPivot = laserPivot;
 
           // ── Output HUD ──────────────────────────────────────────────
           var outPanel = document.createElement('a-plane');
@@ -367,21 +375,24 @@
           self.outPanel = outPanel;
           self.outText  = outText;
 
-          // ── Right grip — laser raycast select ────────────────────
+          // ── Right controller ─────────────────────────────────────
           if (rightCtrl) {
-            rightCtrl.addEventListener('gripdown', function () {
-              laser.setAttribute('visible', 'true');
+            var rigEl = document.querySelector('#rig');
 
-              // Build ray from controller forward direction
+            // GRIP DOWN — laser on, raycast to select building
+            rightCtrl.addEventListener('gripdown', function () {
+              self.gripping = true;
+              laserPivot.setAttribute('visible', 'true');
+
+              // Ray from tilted pivot
               var origin = new THREE.Vector3();
-              rightCtrl.object3D.getWorldPosition(origin);
-              rightCtrl.object3D.getWorldQuaternion(self.tmpQuat);
-              var dir = new THREE.Vector3(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
+              var dir    = new THREE.Vector3(0, 0, -1);
+              laserPivot.object3D.getWorldPosition(origin);
+              laserPivot.object3D.getWorldQuaternion(self.tmpQuat);
+              dir.applyQuaternion(self.tmpQuat).normalize();
               self.raycaster.set(origin, dir);
 
-              // Collect all meshes from placeable entities
-              var meshes = [];
-              var elMap  = [];
+              var meshes = [], elMap = [];
               document.querySelectorAll('.placeable').forEach(function (el) {
                 el.object3D.traverse(function (node) {
                   if (node.isMesh) { meshes.push(node); elMap.push({ mesh: node, el: el }); }
@@ -390,19 +401,32 @@
 
               var hits = self.raycaster.intersectObjects(meshes, false);
               if (hits.length > 0) {
-                // Find which placeable entity the hit mesh belongs to
                 var hitMesh = hits[0].object;
                 for (var i = 0; i < elMap.length; i++) {
                   if (elMap[i].mesh === hitMesh) { self.held = elMap[i].el; break; }
                 }
               }
+
+              // Disable movement so right stick only spins
+              if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: false');
             });
 
+            // GRIP UP — laser off, release building, re-enable movement
             rightCtrl.addEventListener('gripup', function () {
-              laser.setAttribute('visible', 'false');
-              self.held   = null;
-              self.stickX = 0;
-              self.scaleY = 0;
+              self.gripping = false;
+              self.moving   = false;
+              self.held     = null;
+              self.stickX   = 0;
+              laserPivot.setAttribute('visible', 'false');
+              if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: true');
+            });
+
+            // TRIGGER — move only while grip is also held
+            rightCtrl.addEventListener('triggerdown', function () {
+              if (self.gripping) self.moving = true;
+            });
+            rightCtrl.addEventListener('triggerup', function () {
+              self.moving = false;
             });
 
             rightCtrl.addEventListener('thumbstickmoved', function (e) {
@@ -506,33 +530,33 @@
       },
 
       tick: function () {
-        if (!this.held) return;
+        if (!this.held || !this.laserPivot) return;
 
-        var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
-        if (!rightCtrl) return;
+        // ── Move: only when trigger is also held ─────────────────
+        if (this.moving) {
+          var origin = new THREE.Vector3();
+          var dir    = new THREE.Vector3(0, 0, -1);
+          this.laserPivot.object3D.getWorldPosition(origin);
+          this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
+          dir.applyQuaternion(this.tmpQuat).normalize();
 
-        // Project laser ray onto Y=0 ground plane → move building there
-        var origin = new THREE.Vector3();
-        rightCtrl.object3D.getWorldPosition(origin);
-        rightCtrl.object3D.getWorldQuaternion(this.tmpQuat);
-        var dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
-
-        if (Math.abs(dir.y) > 0.001) {
-          var t = -origin.y / dir.y;
-          if (t > 0.5) { // only move if ray hits ground in front
-            this.groundPt.copy(origin).addScaledVector(dir, t);
-            // Snap to 0.5 m grid
-            var snap = 0.5;
-            this.held.object3D.position.x = Math.round(this.groundPt.x / snap) * snap;
-            this.held.object3D.position.z = Math.round(this.groundPt.z / snap) * snap;
+          if (dir.y < -0.001) { // ray must point downward to hit ground
+            var t = -origin.y / dir.y;
+            if (t > 0.3) {
+              this.groundPt.copy(origin).addScaledVector(dir, t);
+              // Smooth lerp — glides rather than snapping
+              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.18;
+              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.18;
+            }
           }
         }
 
-        // Right stick X → spin (fast when pushed hard, slow when nudged)
+        // ── Spin: right stick X (movement disabled so no conflict) ─
         if (Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
-        // Left stick Y → scale (up = bigger, down = smaller)
+
+        // ── Scale: left stick Y ──────────────────────────────────
         if (Math.abs(this.scaleY) > 0.15) {
           var sc = this.held.object3D.scale;
           var ns = Math.max(0.05, sc.x - this.scaleY * 0.003);
@@ -606,7 +630,7 @@
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)      laser grab + drag&#10;STICK L/R (R) spin&#10;STICK U/D (L) scale&#10;GRIP (L)      stamp height post&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
+  <a-text value="GRIP (R)         laser on + select&#10;GRIP+TRIGGER (R) move building&#10;STICK L/R (R)    spin&#10;STICK U/D (L)    scale&#10;GRIP (L)         stamp height post&#10;Y (L)            export positions&#10;B (R)            fly / land&#10;X (L)            cal markers&#10;STICK↓ (R)       capture coord"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
