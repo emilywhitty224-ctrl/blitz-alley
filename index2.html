@@ -611,8 +611,8 @@
           }
         }
 
-        // ── Spin ─────────────────────────────────────────────────
-        if (Math.abs(this.stickX) > 0.15) {
+        // ── Spin — only when trigger NOT held (mutually exclusive with move) ─
+        if (!this.moving && Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
 
@@ -715,17 +715,17 @@
 
   <a-entity class="placeable" data-name="blackfriar" id="b-blackfriar"
     gltf-model="#blackfriar-glb"
-    position="0 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
+    position="0 0 -45" rotation="0 0 0" scale="0.648 0.648 0.648">
   </a-entity>
 
   <a-entity class="placeable" data-name="princelet" id="b-princelet"
     gltf-model="#princelet-glb"
-    position="8 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
+    position="8 0 -45" rotation="0 0 0" scale="1.404 1.404 1.404">
   </a-entity>
 
   <a-entity class="placeable" data-name="factory" id="b-factory"
     gltf-model="#factory-glb"
-    position="16 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
+    position="16 0 -45" rotation="0 0 0" scale="0.962 0.962 0.962">
   </a-entity>
 
   <a-entity class="placeable" data-name="antique" id="b-antique"
@@ -735,7 +735,7 @@
 
   <a-entity class="placeable" data-name="fence" id="b-fence"
     gltf-model="#fence-glb"
-    position="32 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
+    position="32 0 -45" rotation="0 0 0" scale="0.473 0.473 0.473">
   </a-entity>
 
   <!-- ═══ PLAYER ═══
