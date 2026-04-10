@@ -61,6 +61,34 @@
     // No-op kept so attribute doesn't throw if still present on entities
     AFRAME.registerComponent('victorian-night', { init: function () {} });
 
+    // ── NIGHT TINT ───────────────────────────────────────────────────────
+    // Photogrammetry GLBs have daylight baked into their textures — scene
+    // lighting alone can't darken them. This component multiplies every
+    // material's colour down after load, giving a genuine night appearance.
+    // 'brightness' (0–1): how dark. 0.12 ≈ deep night. 'blue' adds moonlight tint.
+    AFRAME.registerComponent('night-tint', {
+      schema: { brightness: { default: 0.12 }, blue: { default: 1.25 } },
+      init: function () {
+        var data = this.data;
+        this.el.addEventListener('model-loaded', function () {
+          this.el.object3D.traverse(function (node) {
+            if (!node.isMesh) return;
+            var mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach(function (mat) {
+              mat.color.r *= data.brightness * 0.85;
+              mat.color.g *= data.brightness * 0.9;
+              mat.color.b *= data.brightness * data.blue;
+              if (mat.emissive) {
+                mat.emissive.r *= 0.05;
+                mat.emissive.g *= 0.05;
+                mat.emissive.b *= 0.05;
+              }
+            });
+          });
+        }.bind(this));
+      }
+    });
+
     // ── GROUND CLAMP ────────────────────────────────────────────────────
     // Automatically shifts any GLB so its lowest point sits exactly at Y=0.
     AFRAME.registerComponent('ground-clamp', {
@@ -299,17 +327,17 @@
   <!-- ═══ BUILDINGS — spaced in a row along Z=-45 ═══ -->
   <a-entity gltf-model="#gatehouse-glb"
     position="-25 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    ground-clamp>
+    ground-clamp night-tint>
   </a-entity>
 
   <a-entity gltf-model="#blackfriar-glb"
     position="0 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    ground-clamp>
+    ground-clamp night-tint>
   </a-entity>
 
   <a-entity gltf-model="#princelet-glb"
     position="25 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
-    ground-clamp>
+    ground-clamp night-tint>
   </a-entity>
 
   <!-- ═══ PLAYER ═══
