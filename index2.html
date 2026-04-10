@@ -411,9 +411,55 @@
           }
 
           // Left thumbstick Y → scale held building (no movement conflict)
+          // Left GRIP → stamp a 5'8" (1.73 m) height reference post at controller position
           if (leftCtrl) {
             leftCtrl.addEventListener('thumbstickmoved', function (e) {
               self.scaleY = e.detail.y;
+            });
+
+            leftCtrl.addEventListener('gripdown', function () {
+              var p = new THREE.Vector3();
+              leftCtrl.object3D.getWorldPosition(p);
+
+              var post = document.createElement('a-entity');
+              post.setAttribute('position', p.x + ' 0 ' + p.z);
+
+              // Thin dark pole
+              var pole = document.createElement('a-box');
+              pole.setAttribute('width',  '0.04');
+              pole.setAttribute('height', '1.73');
+              pole.setAttribute('depth',  '0.04');
+              pole.setAttribute('position', '0 0.865 0');
+              pole.setAttribute('material', 'color:#ffee44; emissive:#ffcc00; emissiveIntensity:0.8; shader:flat; opacity:0.85; transparent:true');
+              post.appendChild(pole);
+
+              // Top cap
+              var cap = document.createElement('a-sphere');
+              cap.setAttribute('radius', '0.06');
+              cap.setAttribute('position', '0 1.73 0');
+              cap.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
+              post.appendChild(cap);
+
+              // Crossbar at 1.73 m
+              var bar = document.createElement('a-box');
+              bar.setAttribute('width',  '0.5');
+              bar.setAttribute('height', '0.03');
+              bar.setAttribute('depth',  '0.03');
+              bar.setAttribute('position', '0 1.73 0');
+              bar.setAttribute('material', 'color:#ffffff; emissive:#ffffff; emissiveIntensity:1; shader:flat');
+              post.appendChild(bar);
+
+              // Label
+              var lbl = document.createElement('a-text');
+              lbl.setAttribute('value', "5'8\" / 1.73m");
+              lbl.setAttribute('position', '0.3 1.73 0');
+              lbl.setAttribute('color', '#ffffff');
+              lbl.setAttribute('width', '1.8');
+              lbl.setAttribute('align', 'left');
+              lbl.setAttribute('material', 'shader:flat');
+              post.appendChild(lbl);
+
+              self.el.sceneEl.appendChild(post);
             });
           }
 
@@ -482,9 +528,9 @@
           }
         }
 
-        // Thumbstick X → rotate
+        // Right stick X → spin (fast when pushed hard, slow when nudged)
         if (Math.abs(this.stickX) > 0.15) {
-          this.held.object3D.rotation.y += this.stickX * 0.025;
+          this.held.object3D.rotation.y += this.stickX * 0.055;
         }
         // Left stick Y → scale (up = bigger, down = smaller)
         if (Math.abs(this.scaleY) > 0.15) {
@@ -560,7 +606,7 @@
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)      laser grab + drag&#10;STICK L/R (R) rotate&#10;STICK U/D (L) scale&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
+  <a-text value="GRIP (R)      laser grab + drag&#10;STICK L/R (R) spin&#10;STICK U/D (L) scale&#10;GRIP (L)      stamp height post&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
