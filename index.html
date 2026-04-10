@@ -293,7 +293,7 @@
   background="color: #c8b898">
 
   <!-- ═══════════════════════ ASSETS ═══════════════════════ -->
-  <a-assets timeout="15000">
+  <a-assets timeout="90000">
     <img id="pub-diff"    src="pub_tile_diffuse.jpg">
     <img id="pub-norm"    src="pub_tile_normal.jpg">
     <img id="pub-rough"   src="pub_tile_roughness.jpg">
@@ -545,9 +545,12 @@
   <a-entity gltf-model="url(Postbox.glb)" position="5.5 0 -7.2" rotation="0 180 0" scale="1 1 1"></a-entity>
 
   <!-- ═══════════════════════ VICTORIAN STREET GLB ═══════════════════════ -->
+  <!-- DEBUG MARKER — bright red sphere at GLB origin. Turn around (face south). -->
+  <a-sphere position="12 3 40" radius="1.5" color="#ff0000"></a-sphere>
+
   <!-- Moved clear of existing scene so you can see it. Walk south (+Z) to find it. -->
   <!-- Once you've seen it and know its orientation, tell me and I'll position it properly. -->
-  <a-entity gltf-model="#vic-street-glb"
+  <a-entity gltf-model="url(victorian_street_scene.glb)"
             position="12 0 40"
             rotation="0 0 0"
             scale="1 1 1">
