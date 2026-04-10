@@ -355,7 +355,7 @@
           function rebuildBbox(el) {
             var id  = el.getAttribute('data-name');
             var box = new THREE.Box3().setFromObject(el.object3D);
-            self.bboxCache[id] = { el: el, box: box };
+            self.bboxCache[id] = { el: el, box: box, lastPos: el.object3D.position.clone() };
           }
           // Rebuild cache when any model finishes loading
           document.querySelectorAll('.placeable').forEach(function (el) {
@@ -445,7 +445,11 @@
             });
 
             rightCtrl.addEventListener('gripup', function () {
-              if (self.held) setHighlight(self.held, false);
+              if (self.held) {
+                setHighlight(self.held, false);
+                // Rebuild bbox now the building has settled — cheap to do once on release
+                rebuildBbox(self.held);
+              }
               self.gripping = false;
               self.moving   = false;
               self.held     = null;
@@ -584,12 +588,18 @@
           var newHovered = null;
           var bestDist   = Infinity;
           var cache      = this.bboxCache;
+          var tmpBox     = new THREE.Box3();
           Object.keys(cache).forEach(function (id) {
             var entry = cache[id];
-            // Update bbox position since building may have moved
-            entry.box.setFromObject(entry.el.object3D);
+            // Offset the cached box by how far the building has moved since bbox was built.
+            // Never call setFromObject in tick — it traverses all mesh vertices and crashes Quest.
+            var cur  = entry.el.object3D.position;
+            var last = entry.lastPos;
+            tmpBox.copy(entry.box);
+            tmpBox.min.x += cur.x - last.x;  tmpBox.min.z += cur.z - last.z;
+            tmpBox.max.x += cur.x - last.x;  tmpBox.max.z += cur.z - last.z;
             var dist = new THREE.Vector3();
-            if (this.raycaster.ray.intersectBox(entry.box, dist) !== null) {
+            if (this.raycaster.ray.intersectBox(tmpBox, dist) !== null) {
               var d = origin.distanceTo(dist);
               if (d < bestDist) { bestDist = d; newHovered = entry.el; }
             }
@@ -713,31 +723,32 @@
           material="shader:flat"></a-text>
 
   <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
+  <!-- Gatehouse straight ahead on load. Others staged to the right. -->
   <a-entity class="placeable" data-name="gatehouse" id="b-gatehouse"
     gltf-model="#gatehouse-glb"
-    position="-8 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333">
+    position="0 0 -45" rotation="0 0 0" scale="0.232 0.232 0.232">
   </a-entity>
 
   <a-entity class="placeable" data-name="blackfriar" id="b-blackfriar"
     gltf-model="#blackfriar-glb"
-    position="0 0 -45" rotation="0 0 0" scale="0.648 0.648 0.648">
+    position="20 0 -45" rotation="0 0 0" scale="0.694 0.694 0.694">
   </a-entity>
 
   <a-entity class="placeable" data-name="princelet" id="b-princelet"
     gltf-model="#princelet-glb"
-    position="8 0 -45" rotation="0 0 0" scale="1.404 1.404 1.404">
+    position="40 0 -45" rotation="0 0 0" scale="1.404 1.404 1.404">
   </a-entity>
 
   <a-entity class="placeable" data-name="factory" id="b-factory"
     gltf-model="#factory-glb"
-    position="16 0 -45" rotation="0 0 0" scale="0.962 0.962 0.962">
+    position="60 0 -45" rotation="0 0 0" scale="0.771 0.771 0.771">
   </a-entity>
 
   <!-- antique shop temporarily removed — 33MB causes Quest memory issues -->
 
   <a-entity class="placeable" data-name="fence" id="b-fence"
     gltf-model="#fence-glb"
-    position="32 0 -45" rotation="0 0 0" scale="0.473 0.473 0.473">
+    position="75 0 -45" rotation="0 0 0" scale="0.406 0.406 0.406">
   </a-entity>
 
   <!-- ═══ PLAYER ═══
