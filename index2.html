@@ -319,109 +319,170 @@
 
   <script>
     // ── VR PLACER ────────────────────────────────────────────────────────
-    // Right GRIP  : grab nearest building (within 8 m), drag along ground
-    // Right STICK : rotate grabbed building (left/right)
-    // Y button    : dump all building positions to HUD so I can hardcode them
+    // Right GRIP        : laser-select a building, drag it along the ground
+    // Stick L/R (right) : rotate held building
+    // Stick U/D (right) : scale held building up/down
+    // Y button (left)   : toggle position export HUD
     AFRAME.registerComponent('vr-placer', {
       init: function () {
         var self = this;
-        self.held = null;
-        self.stickX = 0;
+        self.held      = null;
+        self.stickX    = 0;
+        self.stickY    = 0;
+        self.raycaster = new THREE.Raycaster();
+        self.tmpVec    = new THREE.Vector3();
+        self.tmpQuat   = new THREE.Quaternion();
+        self.groundPt  = new THREE.Vector3();
 
         this.el.sceneEl.addEventListener('loaded', function () {
-          var cam      = document.querySelector('#cam');
-          var rigEl    = document.querySelector('#rig');
+          var cam       = document.querySelector('#cam');
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
+
+          // ── Laser line — child of right controller ───────────────
+          var laser = document.createElement('a-box');
+          laser.setAttribute('width',  '0.005');
+          laser.setAttribute('height', '0.005');
+          laser.setAttribute('depth',  '20');
+          laser.setAttribute('position', '0 0 -10');
+          laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
+          laser.setAttribute('visible', 'false');
+          if (rightCtrl) rightCtrl.appendChild(laser);
+          self.laser = laser;
 
           // ── Output HUD ──────────────────────────────────────────────
           var outPanel = document.createElement('a-plane');
           outPanel.setAttribute('position', '-0.38 0.05 -0.55');
           outPanel.setAttribute('width',  '0.72');
-          outPanel.setAttribute('height', '0.55');
+          outPanel.setAttribute('height', '0.60');
           outPanel.setAttribute('material', 'color:#000811; opacity:0.9; transparent:true; shader:flat');
           outPanel.setAttribute('visible', 'false');
           cam.appendChild(outPanel);
 
           var outText = document.createElement('a-entity');
-          outText.setAttribute('position', '-0.72 0.27 -0.54');
+          outText.setAttribute('position', '-0.72 0.30 -0.54');
           outText.setAttribute('text', 'value: ; color:#44ffaa; align:left; width:0.9; wrapCount:38');
           outText.setAttribute('visible', 'false');
           cam.appendChild(outText);
           self.outPanel = outPanel;
           self.outText  = outText;
 
-          // ── Grab nearest placeable on right grip ─────────────────
+          // ── Right grip — laser raycast select ────────────────────
           if (rightCtrl) {
             rightCtrl.addEventListener('gripdown', function () {
-              var ctrlPos = new THREE.Vector3();
-              rightCtrl.object3D.getWorldPosition(ctrlPos);
+              laser.setAttribute('visible', 'true');
 
-              var nearest = null, nearestDist = 8; // grab radius in metres
+              // Build ray from controller forward direction
+              var origin = new THREE.Vector3();
+              rightCtrl.object3D.getWorldPosition(origin);
+              rightCtrl.object3D.getWorldQuaternion(self.tmpQuat);
+              var dir = new THREE.Vector3(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
+              self.raycaster.set(origin, dir);
+
+              // Collect all meshes from placeable entities
+              var meshes = [];
+              var elMap  = [];
               document.querySelectorAll('.placeable').forEach(function (el) {
-                var p = new THREE.Vector3();
-                el.object3D.getWorldPosition(p);
-                var d = ctrlPos.distanceTo(p);
-                if (d < nearestDist) { nearestDist = d; nearest = el; }
+                el.object3D.traverse(function (node) {
+                  if (node.isMesh) { meshes.push(node); elMap.push({ mesh: node, el: el }); }
+                });
               });
-              if (nearest) {
-                self.held = nearest;
-                nearest.setAttribute('material', 'emissive:#004422'); // subtle highlight
+
+              var hits = self.raycaster.intersectObjects(meshes, false);
+              if (hits.length > 0) {
+                // Find which placeable entity the hit mesh belongs to
+                var hitMesh = hits[0].object;
+                for (var i = 0; i < elMap.length; i++) {
+                  if (elMap[i].mesh === hitMesh) { self.held = elMap[i].el; break; }
+                }
               }
             });
 
             rightCtrl.addEventListener('gripup', function () {
-              if (self.held) {
-                self.held.removeAttribute('material');
-                self.held = null;
-              }
+              laser.setAttribute('visible', 'false');
+              self.held   = null;
+              self.stickX = 0;
+              self.stickY = 0;
             });
 
-            // Thumbstick X → rotate held building
             rightCtrl.addEventListener('thumbstickmoved', function (e) {
               self.stickX = e.detail.x;
+              self.stickY = e.detail.y;
             });
           }
 
-          // ── Y button → dump all positions ───────────────────────
+          // ── Y button — toggle export HUD ────────────────────────
           if (leftCtrl) {
             leftCtrl.addEventListener('ybuttondown', function () {
-              var visible = outPanel.getAttribute('visible');
-              if (visible === 'true' || visible === true) {
+              var vis = outPanel.getAttribute('visible');
+              if (vis === 'true' || vis === true) {
                 outPanel.setAttribute('visible', 'false');
-                outText.setAttribute('visible', 'false');
+                outText.setAttribute('visible',  'false');
                 return;
               }
               var lines = 'BUILDING POSITIONS\n';
               document.querySelectorAll('.placeable').forEach(function (el) {
                 var p  = el.object3D.position;
+                var sc = el.object3D.scale.x.toFixed(3);
                 var ry = Math.round(THREE.MathUtils.radToDeg(el.object3D.rotation.y));
-                var id = el.getAttribute('data-name') || el.id || '?';
-                lines += id + '\n';
-                lines += ' X:' + p.x.toFixed(2) + ' Z:' + p.z.toFixed(2) + ' R:' + ry + '\n';
+                var id = el.getAttribute('data-name') || '?';
+                lines += id + '\n X:' + p.x.toFixed(2) + ' Z:' + p.z.toFixed(2) +
+                         ' R:' + ry + ' S:' + sc + '\n';
               });
               outText.setAttribute('text', 'value', lines);
               outPanel.setAttribute('visible', 'true');
-              outText.setAttribute('visible', 'true');
+              outText.setAttribute('visible',  'true');
             });
           }
+
+          // ── Floating name labels above each building ─────────────
+          document.querySelectorAll('.placeable').forEach(function (el) {
+            var name = el.getAttribute('data-name') || '';
+            if (!name) return;
+            var lbl = document.createElement('a-text');
+            lbl.setAttribute('value', name);
+            lbl.setAttribute('position', '0 8 0');
+            lbl.setAttribute('align', 'center');
+            lbl.setAttribute('color', '#ffee88');
+            lbl.setAttribute('width', '12');
+            lbl.setAttribute('material', 'shader:flat');
+            el.appendChild(lbl);
+          });
         });
       },
 
       tick: function () {
-        if (!this.held) { this.stickX = 0; return; }
+        if (!this.held) return;
 
-        // Drag building along ground with controller
         var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
         if (!rightCtrl) return;
-        var p = new THREE.Vector3();
-        rightCtrl.object3D.getWorldPosition(p);
-        this.held.object3D.position.x = p.x;
-        this.held.object3D.position.z = p.z;
 
-        // Rotate with thumbstick
+        // Project laser ray onto Y=0 ground plane → move building there
+        var origin = new THREE.Vector3();
+        rightCtrl.object3D.getWorldPosition(origin);
+        rightCtrl.object3D.getWorldQuaternion(this.tmpQuat);
+        var dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
+
+        if (Math.abs(dir.y) > 0.001) {
+          var t = -origin.y / dir.y;
+          if (t > 0.5) { // only move if ray hits ground in front
+            this.groundPt.copy(origin).addScaledVector(dir, t);
+            // Snap to 0.5 m grid
+            var snap = 0.5;
+            this.held.object3D.position.x = Math.round(this.groundPt.x / snap) * snap;
+            this.held.object3D.position.z = Math.round(this.groundPt.z / snap) * snap;
+          }
+        }
+
+        // Thumbstick X → rotate
         if (Math.abs(this.stickX) > 0.15) {
-          this.held.object3D.rotation.y += this.stickX * 0.02;
+          this.held.object3D.rotation.y += this.stickX * 0.025;
+        }
+        // Thumbstick Y → scale
+        if (Math.abs(this.stickY) > 0.15) {
+          var sc = this.held.object3D.scale;
+          var ns = Math.max(0.05, sc.x - this.stickY * 0.002);
+          sc.set(ns, ns, ns);
         }
       }
     });
@@ -491,7 +552,7 @@
   <!-- ── Controls board — small, flat on the ground beside the ring ── -->
   <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="1.4"
            material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="GRIP (R)      grab + drag&#10;STICK L/R (R) rotate&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
+  <a-text value="GRIP (R)      laser grab + drag&#10;STICK L/R (R) rotate&#10;STICK U/D (R) scale&#10;Y (L)         export positions&#10;B (R)         fly / land&#10;X (L)         cal markers&#10;STICK↓ (R)    capture coord"
           position="2.2 0.03 -33" rotation="-90 0 -0"
           color="#aaffdd" width="2.0" align="left" wrap-count="28"
           material="shader:flat"></a-text>
