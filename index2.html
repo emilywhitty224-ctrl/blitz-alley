@@ -89,18 +89,55 @@
       }
     });
 
-    // ── GROUND CLAMP ────────────────────────────────────────────────────
-    // Automatically shifts any GLB so its lowest point sits exactly at Y=0.
-    // Defers one frame so the model is fully in the scene graph before measuring.
+    // ── GROUND CLAMP (raycast) ───────────────────────────────────────────
+    // Casts a 5×5 grid of rays downward through the model's footprint.
+    // Collects every intersection Y, sorts them, and uses the 10th-percentile
+    // value as "floor level" — robust against stray low geometry or floating
+    // debris that fools a plain bounding-box min.
     AFRAME.registerComponent('ground-clamp', {
       init: function () {
         var el = this.el;
         el.addEventListener('model-loaded', function () {
           requestAnimationFrame(function () {
-            el.object3D.position.y = 0; // reset before measuring
+            el.object3D.position.y = 0;
+
+            // Bounding box gives us the footprint to sample across
             var box = new THREE.Box3().setFromObject(el.object3D);
             if (box.isEmpty()) return;
-            el.object3D.position.y = -box.min.y;
+
+            // Gather all meshes
+            var meshes = [];
+            el.object3D.traverse(function (node) {
+              if (node.isMesh) meshes.push(node);
+            });
+            if (meshes.length === 0) return;
+
+            // Cast a 5×5 grid of rays downward through the footprint
+            var raycaster = new THREE.Raycaster();
+            var dir = new THREE.Vector3(0, -1, 0);
+            var hitYs = [];
+            var steps = 5;
+            for (var xi = 0; xi < steps; xi++) {
+              for (var zi = 0; zi < steps; zi++) {
+                var x = box.min.x + (box.max.x - box.min.x) * (xi / (steps - 1));
+                var z = box.min.z + (box.max.z - box.min.z) * (zi / (steps - 1));
+                raycaster.set(new THREE.Vector3(x, box.max.y + 5, z), dir);
+                var hits = raycaster.intersectObjects(meshes, false);
+                hits.forEach(function (h) { hitYs.push(h.point.y); });
+              }
+            }
+
+            var floorY;
+            if (hitYs.length > 0) {
+              // 10th percentile — ignores stray low geometry
+              hitYs.sort(function (a, b) { return a - b; });
+              floorY = hitYs[Math.floor(hitYs.length * 0.10)];
+            } else {
+              // Fallback: plain bounding box min
+              floorY = box.min.y;
+            }
+
+            el.object3D.position.y = -floorY;
           });
         });
       }
