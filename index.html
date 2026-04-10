@@ -46,13 +46,23 @@
         height:   { default: 7 },
         depth:    { default: 6 },
         chimneys: { default: 1 },
-        doorOff:  { default: 0 }
+        doorOff:  { default: 0 },
+        render:   { default: false }   // stucco/painted render front facade
       },
       init: function () {
         const el = this.el;
         const W = this.data.width, H = this.data.height;
         const D = this.data.depth, NC = this.data.chimneys, DX = this.data.doorOff;
+        const IS_RENDER = this.data.render;
+
         const bm = 'src: #brick-diff; normalMap: #brick-norm; roughnessMap: #brick-rough; aoMap: #brick-ao; roughness: 0.85; metalness: 0; normalScale: 2 2';
+
+        // Subtle brick colour variation per house (deterministic from dimensions)
+        const BRICK_COLS = ['#7a4a2a','#6e4228','#824e2e','#76422a','#7e502e'];
+        const bv = BRICK_COLS[(Math.round(W * 13 + H * 7)) % BRICK_COLS.length];
+        // Period paint shades for rendered/stucco houses
+        const PAINT_COLS = ['#d0c4a0','#c8bca0','#ccc4ae','#d4c8a8'];
+        const pv = PAINT_COLS[(Math.round(W * 11 + H * 5)) % PAINT_COLS.length];
 
         function spawn(pos, w, h, d, attrs) {
           const b = document.createElement('a-box');
@@ -64,10 +74,8 @@
           el.appendChild(b);
         }
         function bwall(pos, w, h, d) {
-          spawn(pos, w, h, d, { material: bm + '; repeat: ' + +(w/0.8).toFixed(1) + ' ' + +(h/0.38).toFixed(1) + '; color: #7a4a2a' });
+          spawn(pos, w, h, d, { material: bm + '; repeat: ' + +(w/0.8).toFixed(1) + ' ' + +(h/0.38).toFixed(1) + '; color: ' + bv });
         }
-
-        // Cylinder helper for chimney pots
         function spawnCyl(pos, radius, h, col) {
           const c = document.createElement('a-cylinder');
           c.setAttribute('position', pos);
@@ -78,50 +86,78 @@
           el.appendChild(c);
         }
 
-        // Walls
-        bwall(`0 ${H/2} ${D/2}`,       W,    H,    0.25);
-        bwall(`0 ${H/2} ${-D/2}`,      W,    H,    0.25);
-        bwall(`${-W/2} ${H/2} 0`,      0.25, H,    D - 0.5);
-        bwall(`${W/2}  ${H/2} 0`,      0.25, H,    D - 0.5);
+        // ── Walls ──────────────────────────────────────────────
+        if (IS_RENDER) {
+          spawn(`0 ${H/2} ${D/2}`, W, H, 0.25, { material: 'roughness: 0.62; metalness: 0; color: ' + pv });
+        } else {
+          bwall(`0 ${H/2} ${D/2}`, W, H, 0.25);
+        }
+        bwall(`0 ${H/2} ${-D/2}`,     W,    H,    0.25);
+        bwall(`${-W/2} ${H/2} 0`,     0.25, H,    D - 0.5);
+        bwall(`${W/2}  ${H/2} 0`,     0.25, H,    D - 0.5);
 
-        // Stone string course at first-floor level
-        spawn(`0 ${H*0.46} ${D/2+0.14}`, W+0.05, 0.14, 0.18, { color: '#8a7060' });
+        // String course at first-floor level
+        spawn(`0 ${H*0.46} ${D/2+0.14}`, W+0.05, 0.14, 0.18, { color: IS_RENDER ? '#bca88a' : '#8a7060' });
 
-        // Eaves guttering along front facade
+        // Eaves guttering
         spawn(`0 ${H+0.07} ${D/2+0.18}`, W+0.15, 0.09, 0.09, { color: '#181410' });
 
-        // Cast-iron drainpipe on right edge of facade
+        // Cast-iron drainpipe on right edge
         spawn(`${W/2-0.22} ${H*0.5+0.05} ${D/2+0.2}`, 0.075, H+0.1, 0.075, { color: '#181410' });
 
-        // Door surround, door leaf, horizontal rail
+        // ── Door ───────────────────────────────────────────────
         const dH = 2.1;
         spawn(`${DX} ${dH/2+0.08} ${D/2+0.15}`, 1.2, dH+0.16, 0.12, { color: '#2a1e10' });
         spawn(`${DX} ${dH/2}      ${D/2+0.22}`, 1.0, dH,       0.08, { color: '#1e140a' });
         spawn(`${DX} ${dH*0.55}   ${D/2+0.24}`, 0.9, 0.05,     0.05, { color: '#140c06' });
-        // Stone door lintel
-        spawn(`${DX} ${dH+0.13} ${D/2+0.16}`, 1.4, 0.14, 0.2, { color: '#8a7060' });
-        // Step
-        spawn(`${DX} 0.075 ${D/2+0.6}`, 1.4, 0.15, 0.55, { color: '#707070' });
+        spawn(`${DX} ${dH+0.13}   ${D/2+0.16}`, 1.4, 0.14,     0.20, { color: '#8a7060' }); // lintel
+        spawn(`${DX} 0.075        ${D/2+0.60}`, 1.4, 0.15,     0.55, { color: '#707070' }); // step
 
-        // Windows: 2 per floor x 2 floors
+        // ── Windows + Bay ───────────────────────────────────────
         const winW = 0.9, winH = 1.1;
         const wo  = Math.min(W * 0.27, W/2 - winW/2 - 0.25);
         const glm = 'transparent: true; opacity: 0.88; color: #080a08; roughness: 0.3; metalness: 0.15';
+
+        // Bay window on wider houses, opposite side from door
+        const hasBay = W >= 4.5;
+        const bayX   = DX >= 0 ? -wo : wo;
+        const bayProj = 0.52, bayW = 1.45, bayGH = H * 0.49;
+
         [H * 0.24, H * 0.64].forEach(function(wY) {
           [-wo, wo].forEach(function(wX) {
-            if (Math.abs(wX - DX) < 0.7) return; // skip if overlaps door
+            if (Math.abs(wX - DX) < 0.7) return;
+            // Bay replaces ground-floor window on that side
+            if (hasBay && Math.abs(wY - H*0.24) < 0.5 && Math.abs(wX - bayX) < 0.5) return;
+
             spawn(`${wX} ${wY} ${D/2+0.15}`, winW+0.14, winH+0.14, 0.10, { color: '#2a1e10' });
             spawn(`${wX} ${wY} ${D/2+0.22}`, winW, winH, 0.05, { material: glm });
             spawn(`${wX} ${wY} ${D/2+0.24}`, 0.05, winH, 0.03, { color: '#1a1008' });
             spawn(`${wX} ${wY} ${D/2+0.24}`, winW, 0.05, 0.03, { color: '#1a1008' });
-            // Stone sill projecting below window
-            spawn(`${wX} ${wY-winH/2-0.06} ${D/2+0.27}`, winW+0.28, 0.1, 0.22, { color: '#a08870' });
-            // Stone lintel above window
+            spawn(`${wX} ${wY-winH/2-0.06} ${D/2+0.27}`, winW+0.28, 0.10, 0.22, { color: '#a08870' });
             spawn(`${wX} ${wY+winH/2+0.08} ${D/2+0.24}`, winW+0.24, 0.12, 0.18, { color: '#7a6050' });
           });
         });
 
-        // Pitched roof: two angled panels meeting at ridge
+        if (hasBay) {
+          const bY  = bayGH / 2;
+          const bFZ = D/2 + bayProj;
+          const bSZ = D/2 + bayProj / 2;
+          bwall(`${bayX}                 ${bY} ${bFZ}`, bayW, bayGH, 0.22);
+          bwall(`${bayX - bayW/2 - 0.11} ${bY} ${bSZ}`, 0.22, bayGH, bayProj);
+          bwall(`${bayX + bayW/2 + 0.11} ${bY} ${bSZ}`, 0.22, bayGH, bayProj);
+          // Lead flat roof over bay
+          spawn(`${bayX} ${bayGH+0.10} ${bSZ}`, bayW+0.46, 0.15, bayProj+0.26, { color: '#222220' });
+          // Window with central glazing bar
+          const bgW = bayW - 0.36, bgH = bayGH - 0.65;
+          spawn(`${bayX} ${bY} ${bFZ+0.14}`, bgW, bgH, 0.05, { material: glm });
+          spawn(`${bayX} ${bY} ${bFZ+0.15}`, 0.05, bgH, 0.03, { color: '#1a1008' });
+          spawn(`${bayX} ${bY} ${bFZ+0.15}`, bgW, 0.05, 0.03, { color: '#1a1008' });
+          // Sill and lintel on bay front
+          spawn(`${bayX} ${bY - bgH/2 - 0.065} ${bFZ+0.16}`, bgW+0.20, 0.10, 0.22, { color: '#a08870' });
+          spawn(`${bayX} ${bY + bgH/2 + 0.085} ${bFZ+0.14}`, bgW+0.20, 0.12, 0.18, { color: '#7a6050' });
+        }
+
+        // ── Pitched roof ────────────────────────────────────────
         const pitch  = 32 * Math.PI / 180;
         const panelW = (W/2) / Math.cos(pitch);
         const ridgeH = (W/2) * Math.tan(pitch);
@@ -137,20 +173,18 @@
           el.appendChild(r);
         });
 
-        // Gable end fills — close the open triangular ends above the front/back walls
+        // Gable end fills
         spawn(`0 ${H + ridgeH/2} ${D/2  + 0.15}`, W + 0.3, ridgeH + 0.2, 0.3, { color: '#1a1008' });
         spawn(`0 ${H + ridgeH/2} ${-(D/2 + 0.15)}`, W + 0.3, ridgeH + 0.2, 0.3, { color: '#1a1008' });
 
-        // Chimneys — brick stack + cap + two clay pots
+        // ── Chimneys ────────────────────────────────────────────
         const ridgeY = H + ridgeH;
         const cW = 0.42, cDp = 0.42, cHt = 1.4;
         for (let c = 0; c < NC; c++) {
           const cX = NC === 1 ? W * 0.2 : (c === 0 ? -W * 0.15 : W * 0.15);
           const cZ = -D * 0.25;
           bwall(`${cX} ${ridgeY + cHt/2} ${cZ}`, cW, cHt, cDp);
-          // Corbelled cap
-          spawn(`${cX} ${ridgeY+cHt+0.1} ${cZ}`, cW*0.7, 0.18, cDp*0.7, { color: '#2a1e15' });
-          // Two clay chimney pots
+          spawn(`${cX} ${ridgeY+cHt+0.10} ${cZ}`, cW*0.70, 0.18, cDp*0.70, { color: '#2a1e15' });
           spawnCyl(`${+(cX - cW*0.16).toFixed(3)} ${ridgeY+cHt+0.56} ${cZ}`, 0.085, 0.72, '#7a4030');
           spawnCyl(`${+(cX + cW*0.16).toFixed(3)} ${ridgeY+cHt+0.56} ${cZ}`, 0.085, 0.72, '#7a4030');
         }
@@ -245,10 +279,10 @@
 </head>
 <body>
 <a-scene
-  fog="type: linear; color: #c8d8e8; near: 50; far: 120"
-  renderer="colorManagement: true"
+  fog="type: linear; color: #9aaabb; near: 22; far: 90"
+  renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
-  background="color: #6ba3d0">
+  background="color: #8a9aaa">
 
   <!-- ═══════════════════════ ASSETS ═══════════════════════ -->
   <a-assets timeout="15000">
@@ -278,8 +312,10 @@
   </a-entity>
 
   <!-- ═══════════════════════ DAYTIME LIGHTING ═══════════════════════ -->
-  <a-light type="ambient"     color="#d0d8e0" intensity="1.4"></a-light>
-  <a-light type="directional" color="#fff8e8" intensity="1.6"
+  <!-- Hemisphere: sky colour from above, warm-earth bounce from below -->
+  <a-light type="hemisphere" color="#c8d8e8" groundColor="#6a5840" intensity="1.2"></a-light>
+  <!-- Main sun — slightly overcast, angled for side-lit street depth -->
+  <a-light type="directional" color="#fff4e0" intensity="1.4"
            position="-8 20 5" cast-shadow="true">
   </a-light>
 
@@ -502,7 +538,7 @@
 
   <!-- ─── WEST ROW — 5 houses, faces east toward pub ──────────────── -->
   <a-entity terrace-house="width: 4.5; height: 7.0; depth: 6; chimneys: 1; doorOff:  0.5" position="-7 0 -7.25"  rotation="0 90 0"></a-entity>
-  <a-entity terrace-house="width: 5.0; height: 7.5; depth: 6; chimneys: 2; doorOff: -0.8" position="-7 0 -12.0"  rotation="0 90 0"></a-entity>
+  <a-entity terrace-house="width: 5.0; height: 7.5; depth: 6; chimneys: 2; doorOff: -0.8; render: true" position="-7 0 -12.0"  rotation="0 90 0"></a-entity>
   <a-entity terrace-house="width: 4.0; height: 6.5; depth: 6; chimneys: 1; doorOff:  0.2" position="-7 0 -16.5"  rotation="0 90 0"></a-entity>
   <a-entity terrace-house="width: 5.5; height: 7.0; depth: 6; chimneys: 1; doorOff: -1.0" position="-7 0 -21.25" rotation="0 90 0"></a-entity>
   <a-entity terrace-house="width: 4.5; height: 8.0; depth: 6; chimneys: 2; doorOff:  0.6" position="-7 0 -26.25" rotation="0 90 0"></a-entity>
@@ -510,13 +546,13 @@
   <!-- ─── EAST ROW — 5 houses, faces west toward pub ──────────────── -->
   <a-entity terrace-house="width: 4.5; height: 7.5; depth: 6; chimneys: 2; doorOff: -0.5" position="31.25 0 -7.25"  rotation="0 -90 0"></a-entity>
   <a-entity terrace-house="width: 5.0; height: 6.5; depth: 6; chimneys: 1; doorOff:  0.8" position="31.25 0 -12.0"  rotation="0 -90 0"></a-entity>
-  <a-entity terrace-house="width: 4.0; height: 7.0; depth: 6; chimneys: 2; doorOff: -0.3" position="31.25 0 -16.5"  rotation="0 -90 0"></a-entity>
+  <a-entity terrace-house="width: 4.0; height: 7.0; depth: 6; chimneys: 2; doorOff: -0.3; render: true" position="31.25 0 -16.5"  rotation="0 -90 0"></a-entity>
   <a-entity terrace-house="width: 5.5; height: 8.0; depth: 6; chimneys: 1; doorOff:  1.0" position="31.25 0 -21.25" rotation="0 -90 0"></a-entity>
   <a-entity terrace-house="width: 4.5; height: 7.0; depth: 6; chimneys: 2; doorOff: -0.6" position="31.25 0 -26.25" rotation="0 -90 0"></a-entity>
 
   <!-- ─── NORTH ROW — 6 houses, faces south toward pub ─────────────── -->
   <a-entity terrace-house="width: 5.5; height: 7.5; depth: 6; chimneys: 2; doorOff:  0.8" position="-1.25 0 -32.25" rotation="0 0 0"></a-entity>
-  <a-entity terrace-house="width: 6.0; height: 7.0; depth: 6; chimneys: 1; doorOff: -0.5" position="  4.5 0 -32.25" rotation="0 0 0"></a-entity>
+  <a-entity terrace-house="width: 6.0; height: 7.0; depth: 6; chimneys: 1; doorOff: -0.5; render: true" position="  4.5 0 -32.25" rotation="0 0 0"></a-entity>
   <a-entity terrace-house="width: 5.0; height: 8.0; depth: 6; chimneys: 2; doorOff:  0.3" position=" 10.0 0 -32.25" rotation="0 0 0"></a-entity>
   <a-entity terrace-house="width: 6.5; height: 7.0; depth: 6; chimneys: 1; doorOff: -1.2" position=" 15.75 0 -32.25" rotation="0 0 0"></a-entity>
   <a-entity terrace-house="width: 6.0; height: 7.5; depth: 6; chimneys: 2; doorOff:  0.6" position=" 22.0 0 -32.25" rotation="0 0 0"></a-entity>
@@ -525,7 +561,7 @@
   <!-- ─── SOUTH ROW — 6 houses, faces north toward pub ─────────────── -->
   <!-- Front face at Z=+3 (3m south of player start, across the road)  -->
   <a-entity terrace-house="width: 5.5; height: 6.5; depth: 6; chimneys: 1; doorOff: -0.5" position="-1.25 0 9" rotation="0 180 0"></a-entity>
-  <a-entity terrace-house="width: 6.0; height: 7.5; depth: 6; chimneys: 2; doorOff:  0.8" position="  4.5 0 9" rotation="0 180 0"></a-entity>
+  <a-entity terrace-house="width: 6.0; height: 7.5; depth: 6; chimneys: 2; doorOff:  0.8; render: true" position="  4.5 0 9" rotation="0 180 0"></a-entity>
   <a-entity terrace-house="width: 5.0; height: 7.0; depth: 6; chimneys: 1; doorOff: -0.3" position=" 10.0 0 9" rotation="0 180 0"></a-entity>
   <a-entity terrace-house="width: 6.5; height: 8.0; depth: 6; chimneys: 2; doorOff:  1.0" position=" 15.75 0 9" rotation="0 180 0"></a-entity>
   <a-entity terrace-house="width: 6.0; height: 7.0; depth: 6; chimneys: 1; doorOff: -0.5" position=" 22.0 0 9" rotation="0 180 0"></a-entity>
@@ -553,7 +589,7 @@
   <a-box  position="13 0.09 6.0"   width="38" height="0.18" depth="0.12" color="#404040"></a-box>
 
   <!-- ═══════════════════════ SKY ═══════════════════════ -->
-  <a-sky color="#b0c8d8"></a-sky>
+  <a-sky color="#8a9aaa"></a-sky>
 
   <!-- ═══════════════════════ PLAYER ═══════════════════════ -->
   <a-entity id="rig"
