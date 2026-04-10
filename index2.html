@@ -175,9 +175,9 @@
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam = document.querySelector('#cam');
 
-          // Dark backing panel — tall enough for 5 entries
+          // Dark backing panel — bottom-right corner, out of main view
           var panel = document.createElement('a-plane');
-          panel.setAttribute('position', '0.0 -0.07 -0.5');
+          panel.setAttribute('position', '0.34 -0.30 -0.5');
           panel.setAttribute('width', '0.58');
           panel.setAttribute('height', '0.42');
           panel.setAttribute('material', 'color:#000000; opacity:0.84; transparent:true; shader:flat');
@@ -185,8 +185,8 @@
 
           // Coord readout text
           self.hud = document.createElement('a-entity');
-          self.hud.setAttribute('position', '-0.27 0.13 -0.49');
-          self.hud.setAttribute('text', 'value: RIGHT: capture\nLEFT: clear    A: markers; color:#44ff88; align:left; width:0.76');
+          self.hud.setAttribute('position', '0.07 -0.16 -0.49');
+          self.hud.setAttribute('text', 'value: RIGHT: capture\nLEFT: clear    X: markers; color:#44ff88; align:left; width:0.76');
           cam.appendChild(self.hud);
 
           function fmt(n) { return (n >= 0 ? ' ' : '') + n.toFixed(3); }
@@ -242,16 +242,16 @@
                 self.coords.push({ x: p.x, y: p.y, z: p.z });
                 updateHud();
               });
-              // A button — toggle calibration sticks
-              ctrl.addEventListener('abuttondown', function () {
-                self.markersVisible = !self.markersVisible;
-                markersEl.setAttribute('visible', self.markersVisible ? 'true' : 'false');
-              });
             } else {
               // Left trigger — clear all captures
               ctrl.addEventListener('triggerdown', function () {
                 self.coords = [];
                 updateHud();
+              });
+              // X button (left controller) — toggle calibration sticks
+              ctrl.addEventListener('xbuttondown', function () {
+                self.markersVisible = !self.markersVisible;
+                markersEl.setAttribute('visible', self.markersVisible ? 'true' : 'false');
               });
             }
           });
