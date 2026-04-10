@@ -267,58 +267,54 @@
   draco-loader
   coord-capture
   star-field
-  fog="type: linear; color: #b0c8e8; near: 60; far: 120"
+  fog="type: linear; color: #050810; near: 40; far: 90"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
-  background="color: #87ceeb">
+  background="color: #050810">
 
   <a-assets timeout="90000">
-    <a-asset-item id="arch-glb"        src="gunnersbury_arch.glb"></a-asset-item>
     <a-asset-item id="gatehouse-glb"   src="st_bartholomews_gatehouse.glb"></a-asset-item>
     <a-asset-item id="princelet-glb"   src="4_princelet_street.glb"></a-asset-item>
     <a-asset-item id="blackfriar-glb"  src="the_blackfriar_pub.glb"></a-asset-item>
   </a-assets>
 
-  <!-- ═══ LIGHTING — DAYLIGHT ═══ -->
-  <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>
-  <a-light type="hemisphere" color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
-  <a-light type="directional" color="#ffffff" intensity="1.8" position="3 12 8"
+  <!-- ═══ LIGHTING — NIGHT ═══ -->
+  <a-light type="ambient" color="#1a2035" intensity="0.9"></a-light>
+  <a-light type="directional" color="#8090c8" intensity="0.4"
+           position="-5 20 10"
            castShadow="true"
            shadow-camera-near="0.5" shadow-camera-far="80"
            shadow-camera-left="-40" shadow-camera-right="40"
            shadow-camera-top="40" shadow-camera-bottom="-40"
            shadow-map-width="2048" shadow-map-height="2048"></a-light>
+  <a-light type="point" color="#ff7722" intensity="0.7" distance="50" decay="1.4"
+           position="0 3 -50" fire-flicker></a-light>
 
   <!-- ═══ GROUND ═══ -->
   <a-plane position="0 0 -40" rotation="-90 0 0" width="120" height="120"
            material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
 
-  <a-sky color="#87ceeb"></a-sky>
+  <a-sky color="#050810"></a-sky>
 
-  <!-- ═══ BUILDINGS ═══ -->
+  <!-- ═══ BUILDINGS — spaced in a row along Z=-45 ═══ -->
   <a-entity gltf-model="#gatehouse-glb"
-    position="-18.447 0 -39.529" rotation="0 0 0" scale="0.333 0.333 0.333"
-    ground-clamp>
-  </a-entity>
-
-  <a-entity gltf-model="#arch-glb"
-    position="22 0 -48" rotation="0 0 0" scale="0.333 0.333 0.333"
-    ground-clamp>
-  </a-entity>
-
-  <a-entity gltf-model="#princelet-glb"
-    position="0 0 -65" rotation="0 0 0" scale="0.333 0.333 0.333"
+    position="-25 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
     ground-clamp>
   </a-entity>
 
   <a-entity gltf-model="#blackfriar-glb"
-    position="10 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
+    position="0 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
+    ground-clamp>
+  </a-entity>
+
+  <a-entity gltf-model="#princelet-glb"
+    position="25 0 -45" rotation="0 0 0" scale="0.333 0.333 0.333"
     ground-clamp>
   </a-entity>
 
   <!-- ═══ PLAYER ═══
-       Spawns in front of the gatehouse, looking toward it. -->
-  <a-entity id="rig" position="-18.447 0 -32"
+       Spawns centred in front of the row, looking toward the buildings. -->
+  <a-entity id="rig" position="0 0 -33"
             movement-controls="fly: false; speed: 0.8; camera: #cam">
     <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
 
