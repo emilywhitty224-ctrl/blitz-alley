@@ -354,6 +354,7 @@
         self.nightMode         = false;
         self._playerRotLock    = null; // locks rig Y rotation while gripping
         self._rigEl            = null; // cached in scene loaded
+        self._rightCtrlEl      = null; // cached for direct gamepad polling
         // Pre-allocate tick vectors — never new() inside tick
         self._tickOrigin  = new THREE.Vector3();
         self._tickDir     = new THREE.Vector3();
@@ -369,6 +370,7 @@
           var rigEl     = document.querySelector('#rig');
           self._rigEl   = rigEl;
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+          self._rightCtrlEl = rightCtrl;
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
 
           // ── Store originals + build bbox cache after models settle ──
@@ -803,10 +805,19 @@
           }
         }
 
-        // ── Spin — right stick X, only when trigger NOT held ──────────
-        // Right stick is only read inside vr-placer while gripping,
-        // so movement-controls turn only fires when the laser is off.
-        if (!this.moving && Math.abs(this.stickX) > 0.15) {
+        // ── Poll gamepad directly — events miss held positions ─────────
+        if (this.gripping && this._rightCtrlEl) {
+          var tc = this._rightCtrlEl.components['tracked-controls-webxr'] ||
+                   this._rightCtrlEl.components['tracked-controls'];
+          var gp = tc && tc.controller && tc.controller.gamepad;
+          if (gp && gp.axes.length >= 4) {
+            this.stickX = gp.axes[2];
+            this.scaleY = gp.axes[3];
+          }
+        }
+
+        // ── Spin — right stick X ────────────────────────────────────────
+        if (Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
 
