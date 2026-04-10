@@ -287,10 +287,10 @@
 </head>
 <body>
 <a-scene
-  fog="type: linear; color: #9aaabb; near: 22; far: 90"
+  fog="type: linear; color: #c8b898; near: 22; far: 90"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
-  background="color: #8a9aaa">
+  background="color: #c8b898">
 
   <!-- ═══════════════════════ ASSETS ═══════════════════════ -->
   <a-assets timeout="15000">
@@ -614,7 +614,7 @@
            material="color: #282620; transparent: true; opacity: 0.35; roughness: 1"></a-plane>
 
   <!-- ═══════════════════════ SKY ═══════════════════════ -->
-  <a-sky color="#8a9aaa"></a-sky>
+  <a-sky src="sky.jpg" rotation="0 -90 0"></a-sky>
 
   <!-- ═══════════════════════ CLOUDS ═══════════════════════ -->
   <!-- Flat-bottomed overcast cloud boxes above roofline (~13 m) -->
