@@ -108,6 +108,45 @@
         this.el.sceneEl.object3D.add(new THREE.Points(geo, mat));
       }
     });
+
+    // ── COORD CAPTURE ───────────────────────────────────────────────────
+    // Pull the trigger on either Quest controller to snapshot its exact
+    // world position (X/Y/Z). Shown in a HUD overlay — screenshot to record,
+    // then use the numbers to position objects in the scene.
+    AFRAME.registerComponent('coord-capture', {
+      init: function () {
+        var self = this;
+        this.el.sceneEl.addEventListener('loaded', function () {
+          var cam = document.querySelector('#cam');
+
+          // Dark backing panel so text is readable regardless of scene colour
+          var panel = document.createElement('a-plane');
+          panel.setAttribute('position', '0.28 -0.19 -0.5');
+          panel.setAttribute('width', '0.27');
+          panel.setAttribute('height', '0.15');
+          panel.setAttribute('material', 'color:#000000; opacity:0.82; transparent:true; shader:flat');
+          cam.appendChild(panel);
+
+          // Coord readout text
+          self.hud = document.createElement('a-entity');
+          self.hud.setAttribute('position', '0.155 -0.125 -0.49');
+          self.hud.setAttribute('text', 'value:[ pull trigger ]\nto capture XYZ; color:#44ff88; align:left; width:0.58');
+          cam.appendChild(self.hud);
+
+          // Wire up trigger on both controllers
+          document.querySelectorAll('[oculus-touch-controls]').forEach(function (ctrl) {
+            ctrl.addEventListener('triggerdown', function () {
+              var p = new THREE.Vector3();
+              ctrl.object3D.getWorldPosition(p);
+              self.hud.setAttribute('text', 'value',
+                'X: ' + p.x.toFixed(3) +
+                '\nY: ' + p.y.toFixed(3) +
+                '\nZ: ' + p.z.toFixed(3));
+            });
+          });
+        });
+      }
+    });
   </script>
   <script>
     // Unlock AudioContext on first interaction — required by all modern browsers & Quest
@@ -128,6 +167,7 @@
 <body>
 <a-scene
   draco-loader
+  coord-capture
   fog="type: linear; color: #1a1208; near: 22; far: 55"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
@@ -1047,6 +1087,47 @@
     position="0 7 -50"
     rotation="0 0 0"
     scale="65 65 65">
+  </a-entity>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SCALE REFERENCE — 1×1×1m cube + XYZ axes + human-height marker
+       Placed at Z=-15 (mid-alley). Use the trigger coord tool to
+       position objects, then remove this entity when done.
+  ════════════════════════════════════════════════════════════════ -->
+  <a-entity position="0 0 -15">
+    <!-- 1 m cube, base at ground — semi-transparent white wireframe -->
+    <a-box position="0 0.5 0" width="1" height="1" depth="1"
+           material="color:#ffffff; opacity:0.18; transparent:true; wireframe:true; wireframeLinewidth:2; shader:flat"></a-box>
+    <!-- Solid edges to make the cube readable in the dark -->
+    <a-box position="0 0.5 0" width="1.01" height="1.01" depth="1.01"
+           material="color:#888888; opacity:0.08; transparent:true; shader:flat; side:back"></a-box>
+
+    <!-- X axis — red, 2 m long, centred on origin -->
+    <a-box position="1 0.02 0" width="2" height="0.03" depth="0.03"
+           material="color:#ff2222; emissive:#ff0000; emissiveIntensity:0.8; shader:flat"></a-box>
+    <a-text value="+X" position="2.15 0.02 0" rotation="0 0 0"
+            color="#ff4444" width="1.6" align="center"></a-text>
+
+    <!-- Y axis — green, 2 m tall -->
+    <a-box position="0 1 0" width="0.03" height="2" depth="0.03"
+           material="color:#22ff44; emissive:#00ff33; emissiveIntensity:0.8; shader:flat"></a-box>
+    <a-text value="+Y" position="0 2.15 0" rotation="0 0 0"
+            color="#44ff66" width="1.6" align="center"></a-text>
+    <!-- 1.7 m human-height tick -->
+    <a-box position="0.08 1.7 0" width="0.16" height="0.03" depth="0.03"
+           material="color:#22ff44; emissive:#00ff33; emissiveIntensity:0.6; shader:flat"></a-box>
+    <a-text value="1.7m" position="0.35 1.7 0"
+            color="#44ff66" width="1.0" align="left"></a-text>
+
+    <!-- Z axis — blue, 2 m long into scene (-Z) -->
+    <a-box position="0 0.02 -1" width="0.03" height="0.03" depth="2"
+           material="color:#2266ff; emissive:#0044ff; emissiveIntensity:0.8; shader:flat"></a-box>
+    <a-text value="-Z" position="0 0.02 -2.15" rotation="0 180 0"
+            color="#4488ff" width="1.6" align="center"></a-text>
+
+    <!-- Floor label -->
+    <a-text value="1 m cube" position="0 0.04 0.65" rotation="-90 0 0"
+            color="#aaaaaa" width="1.4" align="center"></a-text>
   </a-entity>
 
   <!-- ═══ PLAYER ═══ -->
