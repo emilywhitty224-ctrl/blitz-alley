@@ -340,10 +340,15 @@
         self.groundPt   = new THREE.Vector3();
         self.laserPivot = null;
         self.hovered    = null;
-        self.history    = []; // undo stack [{el, x, z, rotY, scale}]
-        self.originals  = {}; // reset map keyed by data-name
-        self.bboxCache  = {}; // cached bounding boxes keyed by data-name — rebuilt on move
-        self.frameCount = 0;  // throttle hover checks
+        self.history    = [];
+        self.originals  = {};
+        self.bboxCache  = {};
+        self.frameCount = 0;
+        // Pre-allocate tick vectors — never new() inside tick
+        self._tickOrigin = new THREE.Vector3();
+        self._tickDir    = new THREE.Vector3();
+        self._tickDist   = new THREE.Vector3();
+        self._tmpBox     = new THREE.Box3();
 
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
@@ -375,23 +380,6 @@
               rebuildBbox(el);
             });
           });
-
-          // ── Helpers: highlight / unhighlight ────────────────────
-          function setHighlight(el, on) {
-            if (!el) return;
-            el.object3D.traverse(function (node) {
-              if (!node.isMesh) return;
-              var mats = Array.isArray(node.material) ? node.material : [node.material];
-              mats.forEach(function (mat) {
-                if (on) {
-                  if (!mat._origEmissive) mat._origEmissive = mat.emissive.clone();
-                  mat.emissive.setRGB(0.18, 0.18, 0.05);
-                } else {
-                  if (mat._origEmissive) mat.emissive.copy(mat._origEmissive);
-                }
-              });
-            });
-          }
 
           // ── Laser pivot — tilted 45° down ────────────────────────
           var laserPivot = document.createElement('a-entity');
@@ -446,7 +434,6 @@
 
             rightCtrl.addEventListener('gripup', function () {
               if (self.held) {
-                setHighlight(self.held, false);
                 // Rebuild bbox now the building has settled — cheap to do once on release
                 rebuildBbox(self.held);
               }
@@ -567,76 +554,67 @@
             el.appendChild(lbl);
           });
 
-          self._setHighlight = setHighlight;
         });
       },
 
       tick: function () {
-        if (!this.laserPivot || !this._setHighlight) return;
+        if (!this.laserPivot) return;
+        this.frameCount++;
 
-        // ── Hover: ray vs cached bounding BOXES only — runs every 6 frames ─
-        // Full mesh intersection every frame crashed Quest. Bbox is near-free.
-        this.frameCount = (this.frameCount || 0) + 1;
-        if (this.gripping && this.frameCount % 6 === 0) {
-          var origin = new THREE.Vector3();
-          var dir    = new THREE.Vector3(0, 0, -1);
-          this.laserPivot.object3D.getWorldPosition(origin);
+        // ── Hover: bbox check every 12 frames while gripping ────────────
+        // No mesh traversal, no new() allocations — all objects pre-allocated in init.
+        if (this.gripping && this.frameCount % 12 === 0) {
+          this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
           this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
-          dir.applyQuaternion(this.tmpQuat).normalize();
-          this.raycaster.set(origin, dir);
+          this._tickDir.set(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
+          this.raycaster.set(this._tickOrigin, this._tickDir);
 
           var newHovered = null;
           var bestDist   = Infinity;
           var cache      = this.bboxCache;
-          var tmpBox     = new THREE.Box3();
+          var origin     = this._tickOrigin;
+          var dist       = this._tickDist;
+          var tmpBox     = this._tmpBox;
           Object.keys(cache).forEach(function (id) {
             var entry = cache[id];
-            // Offset the cached box by how far the building has moved since bbox was built.
-            // Never call setFromObject in tick — it traverses all mesh vertices and crashes Quest.
-            var cur  = entry.el.object3D.position;
-            var last = entry.lastPos;
+            var cur   = entry.el.object3D.position;
+            var last  = entry.lastPos;
             tmpBox.copy(entry.box);
-            tmpBox.min.x += cur.x - last.x;  tmpBox.min.z += cur.z - last.z;
-            tmpBox.max.x += cur.x - last.x;  tmpBox.max.z += cur.z - last.z;
-            var dist = new THREE.Vector3();
+            var dx = cur.x - last.x, dz = cur.z - last.z;
+            tmpBox.min.x += dx; tmpBox.min.z += dz;
+            tmpBox.max.x += dx; tmpBox.max.z += dz;
             if (this.raycaster.ray.intersectBox(tmpBox, dist) !== null) {
               var d = origin.distanceTo(dist);
               if (d < bestDist) { bestDist = d; newHovered = entry.el; }
             }
           }.bind(this));
-
-          if (newHovered !== this.hovered) {
-            if (this.hovered && this.hovered !== this.held) this._setHighlight(this.hovered, false);
-            this.hovered = newHovered;
-            if (this.hovered && this.hovered !== this.held) this._setHighlight(this.hovered, true);
-          }
+          this.hovered = newHovered;
+          // No setHighlight — traversing photogrammetry materials crashes Quest
         }
 
         if (!this.held) return;
 
-        // ── Move: grip + trigger ─────────────────────────────────
+        // ── Move: grip + trigger ────────────────────────────────────────
         if (this.moving) {
-          var o2 = new THREE.Vector3();
-          var d2 = new THREE.Vector3(0, 0, -1);
-          this.laserPivot.object3D.getWorldPosition(o2);
+          this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
           this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
-          d2.applyQuaternion(this.tmpQuat).normalize();
-          if (d2.y < -0.001) {
-            var t = -o2.y / d2.y;
+          this._tickDir.set(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
+          if (this._tickDir.y < -0.001) {
+            var t = -this._tickOrigin.y / this._tickDir.y;
             if (t > 0.3) {
-              this.groundPt.copy(o2).addScaledVector(d2, t);
+              this.groundPt.copy(this._tickOrigin).addScaledVector(this._tickDir, t);
               this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.18;
               this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.18;
             }
           }
         }
 
-        // ── Spin — only when trigger NOT held ───────────────────
+        // ── Spin — only when trigger NOT held ──────────────────────────
         if (!this.moving && Math.abs(this.stickX) > 0.15) {
           this.held.object3D.rotation.y += this.stickX * 0.055;
         }
 
-        // ── Scale ────────────────────────────────────────────────
+        // ── Scale ───────────────────────────────────────────────────────
         if (Math.abs(this.scaleY) > 0.15) {
           var ns = Math.max(0.05, this.held.object3D.scale.x - this.scaleY * 0.003);
           this.held.object3D.scale.setScalar(ns);
@@ -675,8 +653,6 @@
     <a-asset-item id="princelet-glb"   src="4_princelet_street.glb"></a-asset-item>
     <a-asset-item id="blackfriar-glb"  src="the_blackfriar_pub.glb"></a-asset-item>
     <a-asset-item id="factory-glb"     src="victorian_factory.glb"></a-asset-item>
-    <a-asset-item id="fence-glb"       src="stylized_victorian_fence.glb"></a-asset-item>
-    <a-asset-item id="antique-glb"     src="antique_shop.glb"></a-asset-item>
   </a-assets>
 
   <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
@@ -744,11 +720,7 @@
     position="60 0 -45" rotation="0 0 0" scale="0.771 0.771 0.771">
   </a-entity>
 
-  <!-- antique shop temporarily removed — 33MB causes Quest memory issues -->
-
-  <a-entity class="placeable" data-name="fence" id="b-fence"
-    gltf-model="#fence-glb"
-    position="75 0 -45" rotation="0 0 0" scale="0.406 0.406 0.406">
+  <!-- fence + antique shop removed — too large, cause Quest memory issues -->
   </a-entity>
 
   <!-- ═══ PLAYER ═══
