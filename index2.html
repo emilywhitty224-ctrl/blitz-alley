@@ -419,7 +419,6 @@
             rightCtrl.addEventListener('gripdown', function () {
               self.gripping = true;
               laserPivot.setAttribute('visible', 'true');
-              if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: false');
               if (self.hovered) {
                 var hovId = self.hovered.getAttribute('data-name');
                 var lockEntry = self.locked[hovId];
@@ -436,16 +435,14 @@
             });
 
             rightCtrl.addEventListener('gripup', function () {
-              if (self.held) {
-                // Rebuild bbox now the building has settled — cheap to do once on release
-                rebuildBbox(self.held);
-              }
+              // Do NOT call rebuildBbox here — setFromObject on release still traverses
+              // all mesh vertices and is expensive enough to spike frame time on Quest.
+              // The bbox delta-offset in tick keeps hover working without a full rebuild.
               self.gripping = false;
               self.moving   = false;
               self.held     = null;
               self.stickX   = 0;
               laserPivot.setAttribute('visible', 'false');
-              if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: true');
             });
 
             rightCtrl.addEventListener('triggerdown', function () {
@@ -553,13 +550,11 @@
               entry.icon.setAttribute('visible', entry.state ? 'true' : 'false');
               // If we just locked the held building, release it
               if (entry.state && self.held === target) {
-                rebuildBbox(self.held);
                 self.gripping = false;
                 self.moving   = false;
                 self.held     = null;
                 self.stickX   = 0;
                 laserPivot.setAttribute('visible', 'false');
-                if (rigEl) rigEl.setAttribute('movement-controls', 'enabled: true');
               }
             });
           }
