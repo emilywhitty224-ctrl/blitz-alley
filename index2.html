@@ -144,39 +144,97 @@
     });
 
     // ── COORD CAPTURE ───────────────────────────────────────────────────
-    // Pull the trigger on either Quest controller to snapshot its exact
-    // world position (X/Y/Z). Shown in a HUD overlay — screenshot to record,
-    // then use the numbers to position objects in the scene.
+    // RIGHT trigger: capture controller XYZ (up to 5, listed on HUD).
+    // LEFT trigger: clear the list.
+    // A button (right controller): toggle 3-metre calibration marker sticks.
     AFRAME.registerComponent('coord-capture', {
       init: function () {
         var self = this;
+        self.coords = [];
+        self.markersVisible = false;
+
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam = document.querySelector('#cam');
 
-          // Dark backing panel so text is readable regardless of scene colour
+          // Dark backing panel — tall enough for 5 entries
           var panel = document.createElement('a-plane');
-          panel.setAttribute('position', '0.28 -0.19 -0.5');
-          panel.setAttribute('width', '0.27');
-          panel.setAttribute('height', '0.15');
-          panel.setAttribute('material', 'color:#000000; opacity:0.82; transparent:true; shader:flat');
+          panel.setAttribute('position', '0.0 -0.07 -0.5');
+          panel.setAttribute('width', '0.58');
+          panel.setAttribute('height', '0.42');
+          panel.setAttribute('material', 'color:#000000; opacity:0.84; transparent:true; shader:flat');
           cam.appendChild(panel);
 
           // Coord readout text
           self.hud = document.createElement('a-entity');
-          self.hud.setAttribute('position', '0.155 -0.125 -0.49');
-          self.hud.setAttribute('text', 'value:[ pull trigger ]\nto capture XYZ; color:#44ff88; align:left; width:0.58');
+          self.hud.setAttribute('position', '-0.27 0.13 -0.49');
+          self.hud.setAttribute('text', 'value: RIGHT: capture\nLEFT: clear    A: markers; color:#44ff88; align:left; width:0.76');
           cam.appendChild(self.hud);
 
-          // Wire up trigger on both controllers
+          function fmt(n) { return (n >= 0 ? ' ' : '') + n.toFixed(3); }
+          function updateHud() {
+            var lines;
+            if (self.coords.length === 0) {
+              lines = 'RIGHT trigger: capture\nLEFT trigger: clear\nA button: markers on/off';
+            } else {
+              lines = self.coords.map(function (p, i) {
+                return '#' + (i + 1) + '  X:' + fmt(p.x) + '  Y:' + fmt(p.y) + '  Z:' + fmt(p.z);
+              }).join('\n');
+              lines += '\n';
+              lines += self.coords.length < 5 ? 'RIGHT:+capture  LEFT:clear' : 'LEFT trigger: clear';
+            }
+            self.hud.setAttribute('text', 'value', lines);
+          }
+
+          // ── Calibration marker sticks every 3 m along the alley ──────
+          var markersEl = document.createElement('a-entity');
+          markersEl.setAttribute('id', 'cal-markers');
+          markersEl.setAttribute('visible', 'false');
+          self.el.sceneEl.appendChild(markersEl);
+
+          for (var z = 0; z >= -30; z -= 3) {
+            var stick = document.createElement('a-box');
+            stick.setAttribute('position', '-1.5 1 ' + z);
+            stick.setAttribute('width', '0.06');
+            stick.setAttribute('height', '2');
+            stick.setAttribute('depth', '0.06');
+            stick.setAttribute('material', 'color:#ffdd00; emissive:#ffaa00; emissiveIntensity:0.9; shader:flat');
+            markersEl.appendChild(stick);
+
+            var lbl = document.createElement('a-text');
+            lbl.setAttribute('value', 'Z=' + z + 'm');
+            lbl.setAttribute('position', '-1.3 2.2 ' + z);
+            lbl.setAttribute('color', '#ffee44');
+            lbl.setAttribute('width', '3');
+            lbl.setAttribute('align', 'left');
+            markersEl.appendChild(lbl);
+          }
+
+          // ── Controller wiring ─────────────────────────────────────────
           document.querySelectorAll('[oculus-touch-controls]').forEach(function (ctrl) {
-            ctrl.addEventListener('triggerdown', function () {
-              var p = new THREE.Vector3();
-              ctrl.object3D.getWorldPosition(p);
-              self.hud.setAttribute('text', 'value',
-                'X: ' + p.x.toFixed(3) +
-                '\nY: ' + p.y.toFixed(3) +
-                '\nZ: ' + p.z.toFixed(3));
-            });
+            var comp = ctrl.components['oculus-touch-controls'];
+            var hand = comp && comp.data && comp.data.hand;
+
+            if (hand === 'right') {
+              // Right trigger — add capture (max 5)
+              ctrl.addEventListener('triggerdown', function () {
+                if (self.coords.length >= 5) return;
+                var p = new THREE.Vector3();
+                ctrl.object3D.getWorldPosition(p);
+                self.coords.push({ x: p.x, y: p.y, z: p.z });
+                updateHud();
+              });
+              // A button — toggle calibration sticks
+              ctrl.addEventListener('abuttondown', function () {
+                self.markersVisible = !self.markersVisible;
+                markersEl.setAttribute('visible', self.markersVisible ? 'true' : 'false');
+              });
+            } else {
+              // Left trigger — clear all captures
+              ctrl.addEventListener('triggerdown', function () {
+                self.coords = [];
+                updateHud();
+              });
+            }
           });
         });
       }
@@ -1124,46 +1182,8 @@
     victorian-night>
   </a-entity>
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       SCALE REFERENCE — 1×1×1m cube + XYZ axes + human-height marker
-       Placed at Z=-15 (mid-alley). Use the trigger coord tool to
-       position objects, then remove this entity when done.
-  ════════════════════════════════════════════════════════════════ -->
-  <a-entity position="0 0 -15">
-    <!-- 1 m cube, base at ground — semi-transparent white wireframe -->
-    <a-box position="0 0.5 0" width="1" height="1" depth="1"
-           material="color:#ffffff; opacity:0.18; transparent:true; wireframe:true; wireframeLinewidth:2; shader:flat"></a-box>
-    <!-- Solid edges to make the cube readable in the dark -->
-    <a-box position="0 0.5 0" width="1.01" height="1.01" depth="1.01"
-           material="color:#888888; opacity:0.08; transparent:true; shader:flat; side:back"></a-box>
-
-    <!-- X axis — red, 2 m long, centred on origin -->
-    <a-box position="1 0.02 0" width="2" height="0.03" depth="0.03"
-           material="color:#ff2222; emissive:#ff0000; emissiveIntensity:0.8; shader:flat"></a-box>
-    <a-text value="+X" position="2.15 0.02 0" rotation="0 0 0"
-            color="#ff4444" width="1.6" align="center"></a-text>
-
-    <!-- Y axis — green, 2 m tall -->
-    <a-box position="0 1 0" width="0.03" height="2" depth="0.03"
-           material="color:#22ff44; emissive:#00ff33; emissiveIntensity:0.8; shader:flat"></a-box>
-    <a-text value="+Y" position="0 2.15 0" rotation="0 0 0"
-            color="#44ff66" width="1.6" align="center"></a-text>
-    <!-- 1.7 m human-height tick -->
-    <a-box position="0.08 1.7 0" width="0.16" height="0.03" depth="0.03"
-           material="color:#22ff44; emissive:#00ff33; emissiveIntensity:0.6; shader:flat"></a-box>
-    <a-text value="1.7m" position="0.35 1.7 0"
-            color="#44ff66" width="1.0" align="left"></a-text>
-
-    <!-- Z axis — blue, 2 m long into scene (-Z) -->
-    <a-box position="0 0.02 -1" width="0.03" height="0.03" depth="2"
-           material="color:#2266ff; emissive:#0044ff; emissiveIntensity:0.8; shader:flat"></a-box>
-    <a-text value="-Z" position="0 0.02 -2.15" rotation="0 180 0"
-            color="#4488ff" width="1.6" align="center"></a-text>
-
-    <!-- Floor label -->
-    <a-text value="1 m cube" position="0 0.04 0.65" rotation="-90 0 0"
-            color="#aaaaaa" width="1.4" align="center"></a-text>
-  </a-entity>
+  <!-- Calibration marker sticks are generated by the coord-capture component.
+       Press A (right controller) to show/hide them. -->
 
   <!-- ═══ PLAYER ═══ -->
   <a-entity id="rig" position="0 0 -1"
