@@ -210,18 +210,42 @@
           markersEl.setAttribute('visible', 'false');
           self.el.sceneEl.appendChild(markersEl);
 
-          for (var z = 0; z >= -30; z -= 3) {
-            var stick = document.createElement('a-box');
-            stick.setAttribute('position', '-1.5 1 ' + z);
-            stick.setAttribute('width', '0.06');
-            stick.setAttribute('height', '2');
-            stick.setAttribute('depth', '0.06');
-            stick.setAttribute('material', 'color:#ffdd00; emissive:#ffaa00; emissiveIntensity:0.9; shader:flat');
-            markersEl.appendChild(stick);
+          var matY = 'color:#ffdd00; emissive:#ffaa00; emissiveIntensity:0.9; shader:flat';
+          var matX = 'color:#ff4444; emissive:#ff2200; emissiveIntensity:0.9; shader:flat';
+          var matZ = 'color:#4488ff; emissive:#2244ff; emissiveIntensity:0.9; shader:flat';
 
+          for (var z = 0; z >= -30; z -= 3) {
+            // Y axis — yellow vertical stick, 2 m tall
+            var stickY = document.createElement('a-box');
+            stickY.setAttribute('position', '0 1 ' + z);
+            stickY.setAttribute('width', '0.06');
+            stickY.setAttribute('height', '2');
+            stickY.setAttribute('depth', '0.06');
+            stickY.setAttribute('material', matY);
+            markersEl.appendChild(stickY);
+
+            // X axis — red arm, 2 m wide (centred, so ±1 m each side)
+            var armX = document.createElement('a-box');
+            armX.setAttribute('position', '0 1 ' + z);
+            armX.setAttribute('width', '2');
+            armX.setAttribute('height', '0.06');
+            armX.setAttribute('depth', '0.06');
+            armX.setAttribute('material', matX);
+            markersEl.appendChild(armX);
+
+            // Z axis — blue arm, 2 m deep (±1 m along alley)
+            var armZ = document.createElement('a-box');
+            armZ.setAttribute('position', '0 1 ' + z);
+            armZ.setAttribute('width', '0.06');
+            armZ.setAttribute('height', '0.06');
+            armZ.setAttribute('depth', '2');
+            armZ.setAttribute('material', matZ);
+            markersEl.appendChild(armZ);
+
+            // Label
             var lbl = document.createElement('a-text');
             lbl.setAttribute('value', 'Z=' + z + 'm');
-            lbl.setAttribute('position', '-1.3 2.2 ' + z);
+            lbl.setAttribute('position', '0.12 2.2 ' + z);
             lbl.setAttribute('color', '#ffee44');
             lbl.setAttribute('width', '3');
             lbl.setAttribute('align', 'left');
@@ -279,10 +303,10 @@
 <a-scene
   draco-loader
   coord-capture
-  fog="type: linear; color: #1a1208; near: 22; far: 55"
+  fog="type: linear; color: #b0c8e8; near: 60; far: 120"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
-  background="color: #060402">
+  background="color: #87ceeb">
 
   <a-assets timeout="90000">
     <img id="brick-diff"  src="brown_brick_diffuse.jpg">
@@ -312,10 +336,10 @@
        Fire = warm amber at end, hotter orange-red in side alley.
        Lamps = barely on (blackout). No pure red wash.
   -->
-  <a-light type="ambient"     color="#1c2230" intensity="0.28"></a-light>
-  <!-- Hemisphere — cool moonlit sky, warm ember ground bounce -->
-  <a-light type="hemisphere" color="#2a3550" groundColor="#3a1a08" intensity="0.45"></a-light>
-  <a-light type="directional" color="#8090b0" intensity="0.18" position="3 12 8"
+  <!-- TEMP DAYLIGHT — revert to night values when done building -->
+  <a-light type="ambient"     color="#ffffff" intensity="1.2"></a-light>
+  <a-light type="hemisphere" color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
+  <a-light type="directional" color="#ffffff" intensity="1.8" position="3 12 8"
            castShadow="true"
            shadow-camera-near="0.5" shadow-camera-far="60"
            shadow-camera-left="-20" shadow-camera-right="20"
