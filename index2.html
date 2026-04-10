@@ -267,10 +267,10 @@
   draco-loader
   coord-capture
   star-field
-  fog="type: linear; color: #050810; near: 40; far: 90"
+  fog="type: linear; color: #b0c8e8; near: 60; far: 120"
   renderer="colorManagement: true; antialias: true; physicallyCorrectLights: true"
   shadow="type: pcfsoft"
-  background="color: #050810">
+  background="color: #87ceeb">
 
   <a-assets timeout="90000">
     <a-asset-item id="arch-glb"        src="gunnersbury_arch.glb"></a-asset-item>
@@ -279,26 +279,21 @@
     <a-asset-item id="blackfriar-glb"  src="the_blackfriar_pub.glb"></a-asset-item>
   </a-assets>
 
-  <!-- ═══ LIGHTING ═══ -->
-  <!-- Cool moonlight ambient -->
-  <a-light type="ambient" color="#1a2035" intensity="0.9"></a-light>
-  <!-- Directional moon — soft blue-white from above -->
-  <a-light type="directional" color="#8090c8" intensity="0.4"
-           position="-5 20 10"
+  <!-- ═══ LIGHTING — DAYLIGHT ═══ -->
+  <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>
+  <a-light type="hemisphere" color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
+  <a-light type="directional" color="#ffffff" intensity="1.8" position="3 12 8"
            castShadow="true"
            shadow-camera-near="0.5" shadow-camera-far="80"
            shadow-camera-left="-40" shadow-camera-right="40"
            shadow-camera-top="40" shadow-camera-bottom="-40"
            shadow-map-width="2048" shadow-map-height="2048"></a-light>
-  <!-- Distant fire glow from the east — amber -->
-  <a-light type="point" color="#ff7722" intensity="0.7" distance="50" decay="1.4"
-           position="20 3 -50" fire-flicker></a-light>
 
   <!-- ═══ GROUND ═══ -->
   <a-plane position="0 0 -40" rotation="-90 0 0" width="120" height="120"
            material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
 
-  <a-sky color="#050810"></a-sky>
+  <a-sky color="#87ceeb"></a-sky>
 
   <!-- ═══ BUILDINGS ═══ -->
   <a-entity gltf-model="#gatehouse-glb"
