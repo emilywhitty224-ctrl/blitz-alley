@@ -12,6 +12,12 @@
 
   <script>
     var PLACER_VERSION = 'v1.5';
+    // Nuclear safety net — any unhandled Promise rejection kills the Quest WebXR session.
+    // This catches everything that slips through individual .catch() guards.
+    window.addEventListener('unhandledrejection', function (e) {
+      e.preventDefault();
+      console.warn('[safety] unhandled rejection suppressed:', e.reason);
+    });
   </script>
 
   <script>
@@ -182,8 +188,8 @@
   </a-assets>
 
   <!-- ═══ STAGING AREA — spawned sequentially by JS below to avoid GPU OOM ═══ -->
-  <!-- Single line along X axis, Z=-43 (10 m from spawn), 5 m between each building -->
-  <!-- X runs from -30 to +30. Walk sideways to browse, grab and drag into position. -->
+  <!-- Single line along X axis, Z=-50 (17 m from spawn), 10 m between each building -->
+  <!-- X runs from -60 to +60. Walk sideways to browse, grab and drag into position. -->
 
   <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
   <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>
@@ -386,19 +392,19 @@ Green: visitor / build"
   // ── SEQUENTIAL SPAWN — one entity at a time, each waiting for model-loaded ──
   // Staggers GPU texture uploads to avoid OOM crash when all 13 load at once.
   var _STAGED = [
-    { name:'gatehouse-0',    src:'#gatehouse-glb',        scale:0.232, x:-30 },
-    { name:'blackfriar-0',   src:'#blackfriar-glb',       scale:0.694, x:-25 },
-    { name:'princelet-0',    src:'#princelet-glb',        scale:1.404, x:-20 },
-    { name:'factory-0',      src:'#factory-glb',          scale:0.771, x:-15 },
-    { name:'derelict-fac-0', src:'#derelict-factory-glb', scale:1.0,   x:-10 },
-    { name:'vic-pack-0',     src:'#victorian-pack-glb',   scale:1.0,   x:-5  },
-    { name:'brick-wall-0',   src:'#brick-wall-glb',       scale:1.0,   x:0   },
-    { name:'rubble-0',       src:'#rubble-glb',           scale:1.0,   x:5   },
-    { name:'old-lamp-0',     src:'#old-lamp-glb',         scale:1.0,   x:10  },
-    { name:'antique-shop-0', src:'#antique-shop-glb',     scale:1.0,   x:15  },
-    { name:'vic-fence-0',    src:'#victorian-fence-glb',  scale:1.0,   x:20  },
-    { name:'vic-street-0',   src:'#victorian-street-glb', scale:1.0,   x:25  },
-    { name:'arch-0',         src:'#gunnersbury-arch-glb', scale:1.0,   x:30  }
+    { name:'gatehouse-0',    src:'#gatehouse-glb',        scale:0.232, x:-60, z:-50 },
+    { name:'blackfriar-0',   src:'#blackfriar-glb',       scale:0.694, x:-50, z:-50 },
+    { name:'princelet-0',    src:'#princelet-glb',        scale:1.404, x:-40, z:-50 },
+    { name:'factory-0',      src:'#factory-glb',          scale:0.771, x:-30, z:-50 },
+    { name:'derelict-fac-0', src:'#derelict-factory-glb', scale:1.0,   x:-20, z:-50 },
+    { name:'vic-pack-0',     src:'#victorian-pack-glb',   scale:1.0,   x:-10, z:-50 },
+    { name:'brick-wall-0',   src:'#brick-wall-glb',       scale:1.0,   x:0,   z:-50 },
+    { name:'rubble-0',       src:'#rubble-glb',           scale:1.0,   x:10,  z:-50 },
+    { name:'old-lamp-0',     src:'#old-lamp-glb',         scale:1.0,   x:20,  z:-50 },
+    { name:'antique-shop-0', src:'#antique-shop-glb',     scale:1.0,   x:30,  z:-50 },
+    { name:'vic-fence-0',    src:'#victorian-fence-glb',  scale:1.0,   x:40,  z:-50 },
+    { name:'vic-street-0',   src:'#victorian-street-glb', scale:1.0,   x:50,  z:-50 },
+    { name:'arch-0',         src:'#gunnersbury-arch-glb', scale:1.0,   x:60,  z:-50 }
   ];
   var _stageDone = 0;
   var _stageTotal = _STAGED.length;
@@ -412,7 +418,7 @@ Green: visitor / build"
     e.setAttribute('data-name', d.name);
     e.setAttribute('gltf-model', d.src);
     var s = d.scale;
-    e.setAttribute('position', d.x + ' 0 -43');
+    e.setAttribute('position', d.x + ' 0 ' + (d.z || -50));
     e.setAttribute('scale', s + ' ' + s + ' ' + s);
     e.addEventListener('model-loaded', function () {
       // Register with vr-placer so the laser can hover/grab this building

@@ -358,10 +358,12 @@ AFRAME.registerComponent('vr-placer', {
 
       // ── Store originals + build bbox cache after models settle ──────────
       function rebuildBbox(el) {
-        var id  = el.getAttribute('data-name');
-        var box = new THREE.Box3().setFromObject(el.object3D);
-        self.bboxCache[id] = { el: el, box: box, lastPos: el.object3D.position.clone() };
-        self.bboxKeys = Object.keys(self.bboxCache);
+        try {
+          var id  = el.getAttribute('data-name');
+          var box = new THREE.Box3().setFromObject(el.object3D);
+          self.bboxCache[id] = { el: el, box: box, lastPos: el.object3D.position.clone() };
+          self.bboxKeys = Object.keys(self.bboxCache);
+        } catch (e) { console.warn('rebuildBbox failed for', el && el.getAttribute('data-name'), e); }
       }
       document.querySelectorAll('.placeable').forEach(function (el) {
         el.addEventListener('model-loaded', function () {
@@ -520,10 +522,12 @@ AFRAME.registerComponent('vr-placer', {
             }
             self._haptic(rightCtrl, 0.2, 50); // soft release buzz
             requestAnimationFrame(function () {
-              var id  = justReleased.getAttribute('data-name');
-              var box = new THREE.Box3().setFromObject(justReleased.object3D);
-              self.bboxCache[id] = { el: justReleased, box: box, lastPos: justReleased.object3D.position.clone() };
-              self.bboxKeys = Object.keys(self.bboxCache);
+              try {
+                var id  = justReleased.getAttribute('data-name');
+                var box = new THREE.Box3().setFromObject(justReleased.object3D);
+                self.bboxCache[id] = { el: justReleased, box: box, lastPos: justReleased.object3D.position.clone() };
+                self.bboxKeys = Object.keys(self.bboxCache);
+              } catch (e) {}
             });
           }
           // Auto-save layout
