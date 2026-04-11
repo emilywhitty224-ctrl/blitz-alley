@@ -415,6 +415,8 @@ Green: visitor / build"
     e.setAttribute('position', d.x + ' 0 -43');
     e.setAttribute('scale', s + ' ' + s + ' ' + s);
     e.addEventListener('model-loaded', function () {
+      // Register with vr-placer so the laser can hover/grab this building
+      if (window._vrPlacerRegisterLoaded) window._vrPlacerRegisterLoaded(e);
       _stageDone++;
       var lc = document.querySelector('#loading-counter');
       if (lc) {

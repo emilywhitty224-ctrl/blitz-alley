@@ -382,6 +382,22 @@ AFRAME.registerComponent('vr-placer', {
         window._placerOriginals = self.originals;
       });
 
+      // Called by sequential spawner (index2.html) once each building's model-loaded fires.
+      // Registers the entity in bboxCache + originals so the laser can hover/grab it.
+      window._vrPlacerRegisterLoaded = function (el) {
+        requestAnimationFrame(function () {
+          var id = el.getAttribute('data-name');
+          var p  = el.object3D.position;
+          self.originals[id] = {
+            x: p.x, y: p.y || 0, z: p.z,
+            rotY: el.object3D.rotation.y,
+            scale: el.object3D.scale.x
+          };
+          window._placerOriginals = self.originals;
+          rebuildBbox(el);
+        });
+      };
+
       // ── Right laser pivot — tilted 45° down ─────────────────────────────
       var laserPivot = document.createElement('a-entity');
       laserPivot.setAttribute('rotation', '-45 0 0');
@@ -1653,9 +1669,9 @@ AFRAME.registerComponent('radial-menu', {
 // special: 'reset' = two-step confirmation.  info: true = display-only tile.
 var _CP_ITEMS = [
   // Row 0 — Tool modes + undo/redo
-  { id:'normal',  label:'NORMAL',  sub:'spin + scale',  isMode:0, fn:function(p){if(p)p._toolMode=0; return 'NORMAL mode';} },
-  { id:'tilt',    label:'TILT',    sub:'lean X / Z',    isMode:1, fn:function(p){if(p)p._toolMode=1; return 'TILT mode';} },
-  { id:'height',  label:'HEIGHT',  sub:'raise / lower', isMode:2, fn:function(p){if(p)p._toolMode=2; return 'HEIGHT mode';} },
+  { id:'normal',  label:'NORMAL',  sub:'X=spin Y=scale', isMode:0, fn:function(p){if(p)p._toolMode=0; return 'NORMAL mode';} },
+  { id:'tilt',    label:'TILT',    sub:'X=lean Y=pitch', isMode:1, fn:function(p){if(p)p._toolMode=1; return 'TILT mode';} },
+  { id:'height',  label:'HEIGHT',  sub:'Y=up/dn X=spin', isMode:2, fn:function(p){if(p)p._toolMode=2; return 'HEIGHT mode';} },
   { id:'undo',    label:'UNDO',    sub:'last action',   fn:function(p){return p&&p.doUndo?p.doUndo():'';} },
   { id:'redo',    label:'REDO',    sub:'redo action',   fn:function(p){return p&&p.doRedo?p.doRedo():'';} },
   // Row 1 — Build actions + scene
@@ -1803,7 +1819,7 @@ AFRAME.registerComponent('control-panel', {
     bg.setAttribute('width',  '0.75');
     bg.setAttribute('height', '0.50');
     bg.setAttribute('position', '0 -0.025 -0.001');
-    bg.setAttribute('material', 'color:#070c16; opacity:0.96; transparent:true; shader:flat; side:double');
+    bg.setAttribute('material', 'color:#050810; opacity:1.0; shader:flat; side:double');
     panel.appendChild(bg);
 
     // Title
@@ -1837,7 +1853,7 @@ AFRAME.registerComponent('control-panel', {
         var cbg = document.createElement('a-plane');
         cbg.setAttribute('width',  CW);
         cbg.setAttribute('height', CH);
-        cbg.setAttribute('material', 'color:#111827; opacity:' + (item ? '0.92' : '0.25') + '; transparent:true; shader:flat; side:double');
+        cbg.setAttribute('material', 'color:#0d1a2e; opacity:1.0; shader:flat; side:double');
         cell.appendChild(cbg);
         cell._bg = cbg;
 
