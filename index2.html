@@ -70,9 +70,10 @@
     AFRAME.registerComponent('night-aware', {
       init: function () {
         var self = this;
-        self._origColors = []; // { mat, r, g, b, er, eg, eb }
+        self._origColors = [];
         self._ready = false;
-        self.el.addEventListener('model-loaded', function () {
+
+        function cacheColors() {
           self._origColors = [];
           self.el.object3D.traverse(function (node) {
             if (!node.isMesh) return;
@@ -87,10 +88,16 @@
               });
             });
           });
+          if (self._origColors.length === 0) return; // mesh not ready yet
           self._ready = true;
-          // If night mode is already on when the model loads, tint immediately
           if (window._nightMode) self.applyNight(true);
-        });
+        }
+
+        self.el.addEventListener('model-loaded', cacheColors);
+        // Cached assets may fire model-loaded before this listener attaches —
+        // also check immediately and after a short delay as fallback
+        setTimeout(function () { if (!self._ready) cacheColors(); }, 500);
+        setTimeout(function () { if (!self._ready) cacheColors(); }, 2000);
         window._nightAware.push(self);
       },
       applyNight: function (on) {
@@ -126,6 +133,40 @@
     });
     // Legacy no-op — kept so old night-tint attributes don't throw
     AFRAME.registerComponent('night-tint', { init: function () {} });
+
+    // ── BOUNDARY COLLIDER ─────────────────────────────────────────────────
+    // Keeps the player inside defined axis-aligned walls.
+    // Only active in visitor/walk mode. Walls defined as
+    // { axis:'x'|'z', min, max } — player is clamped to [min,max] on that axis.
+    window._visitorMode = false;
+    window._boundaryWalls = [
+      // Default alley bounds — adjust once buildings are placed
+      // These are OFF until you define real wall positions
+      // { axis:'x', min:-2, max:2 },
+      // { axis:'z', min:-30, max:0 }
+    ];
+    AFRAME.registerComponent('boundary-collider', {
+      init: function () {
+        this._rig = null;
+        var self = this;
+        this.el.sceneEl.addEventListener('loaded', function () {
+          self._rig = document.querySelector('#rig');
+        });
+      },
+      tick: function () {
+        if (!window._visitorMode || !this._rig) return;
+        var pos = this._rig.object3D.position;
+        window._boundaryWalls.forEach(function (w) {
+          if (w.axis === 'x') {
+            if (pos.x < w.min) pos.x = w.min;
+            if (pos.x > w.max) pos.x = w.max;
+          } else if (w.axis === 'z') {
+            if (pos.z < w.min) pos.z = w.min;
+            if (pos.z > w.max) pos.z = w.max;
+          }
+        });
+      }
+    });
 
     // ── GROUND CLAMP (raycast) ───────────────────────────────────────────
     // Casts a 5×5 grid of rays downward through the model's footprint.
@@ -422,8 +463,8 @@
           self._leftCtrlEl  = leftCtrl;
           // World-space clickable buttons — laser trigger fires these when no building held
           self._btnPts = [
-            { pos: new THREE.Vector3(5.5, 1.15, -33),  fn: function () { if (window.toggleNight) window.toggleNight(); } },
-            { pos: new THREE.Vector3(8.2, 1.15, -33),  fn: function () { if (window._resetPending) { window._doReset && window._doReset(); } else { window._resetPending = true; if (self.outText) { self.outText.setAttribute('visible','true'); self.outText.setAttribute('value','RESET MAP?\nTrigger again to confirm'); } setTimeout(function(){ window._resetPending=false; if(self.outText)self.outText.setAttribute('visible','false'); }, 5000); } } }
+            { pos: new THREE.Vector3(5.5,  1.15, -33), fn: function () { if (window.toggleNight) window.toggleNight(); } },
+            { pos: new THREE.Vector3(10.9, 1.15, -33), fn: function () { if (window.toggleVisitorMode) window.toggleVisitorMode(); } }
           ];
           self._btnRay = new THREE.Ray();
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
@@ -601,9 +642,9 @@
                 laserPivot.object3D.getWorldPosition(self._tickOrigin);
                 laserPivot.object3D.getWorldQuaternion(self.tmpQuat);
                 self._tickDir.set(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
-                self._btnRay.set(self._tickOrigin, self._tickDir);
                 for (var bi = 0; bi < self._btnPts.length; bi++) {
-                  if (self._btnRay.distanceToPoint(self._btnPts[bi].pos) < 0.4) {
+                  var toBtn = new THREE.Vector3().subVectors(self._btnPts[bi].pos, self._tickOrigin).normalize();
+                  if (toBtn.dot(self._tickDir) > 0.96) { // ~16° cone
                     self._btnPts[bi].fn();
                     break;
                   }
@@ -813,8 +854,14 @@
           if (rightCtrl) {
             rightCtrl.addEventListener('abuttondown', function () {
               if (self.held) {
-                // Floor snap
-                self.held.object3D.position.y = 0;
+                if (self._tiltMode) {
+                  // Snap to level when in tilt mode
+                  self.held.object3D.rotation.x = 0;
+                  self.held.object3D.rotation.z = 0;
+                } else {
+                  // Floor snap
+                  self.held.object3D.position.y = 0;
+                }
                 return;
               }
               // No building held — use double-tap A to lock/unlock hovered building
@@ -959,12 +1006,22 @@
         this._tiltMode = this.gripping && this.leftGripping;
 
         if (this._tiltMode) {
-          // Right stick X → lean left/right (Z-axis rotation)
-          // Right stick Y → lean forward/back (X-axis rotation)
+          // Right stick X → lean left/right (Z), Y → lean forward/back (X)
+          // Inverted so stick direction matches visual lean direction
           if (Math.abs(this.stickX) > 0.15)
-            this.held.object3D.rotation.z -= this.stickX * 0.018;
+            this.held.object3D.rotation.z += this.stickX * 0.018;
           if (Math.abs(this.scaleY) > 0.15)
-            this.held.object3D.rotation.x -= this.scaleY * 0.018;
+            this.held.object3D.rotation.x += this.scaleY * 0.018;
+          // Level readout — show tilt angles, indicate when level
+          if (this.readout && this.frameCount % 6 === 0) {
+            var rx = THREE.MathUtils.radToDeg(this.held.object3D.rotation.x);
+            var rz = THREE.MathUtils.radToDeg(this.held.object3D.rotation.z);
+            var isLevel = Math.abs(rx) < 1.5 && Math.abs(rz) < 1.5;
+            this.readout.setAttribute('text', 'value',
+              (isLevel ? '✓ LEVEL' : 'tilt  X:' + rx.toFixed(1) + '°  Z:' + rz.toFixed(1) + '°'));
+            this.readout.setAttribute('visible', 'true');
+            this.readoutTimer = 6;
+          }
         } else {
           // ── Spin — right stick X, pivoting around laser hit point ────
           if (Math.abs(this.stickX) > 0.15) {
@@ -1058,7 +1115,7 @@
 
         // Height adjust: left stick Y moves whatever left laser points at
         if (this.leftGripping && this.leftHovered && Math.abs(this.heightY) > 0.15) {
-          this.leftHovered.object3D.position.y += this.heightY * 0.007;
+          this.leftHovered.object3D.position.y -= this.heightY * 0.007;
           // Show Y offset in readout
           if (this.readout && this.frameCount % 6 === 0) {
             var hy  = this.leftHovered.object3D.position.y.toFixed(2);
@@ -1106,6 +1163,30 @@
       // Night toggle
       var nightBtn = document.querySelector('#night-btn');
       if (nightBtn) nightBtn.addEventListener('click', window.toggleNight);
+
+      // Visitor / walk mode toggle
+      window.toggleVisitorMode = function () {
+        window._visitorMode = !window._visitorMode;
+        var vBtn = document.querySelector('#visitor-btn');
+        var vLbl = document.querySelector('#visitor-sub');
+        var scene = document.querySelector('a-scene');
+        var rig   = document.querySelector('#rig');
+        if (window._visitorMode) {
+          // VISITOR: disable placer laser, normal walk speed, hide builder UI
+          if (vBtn) vBtn.setAttribute('material', 'color:#003300; emissive:#00ff44; emissiveIntensity:1; shader:flat');
+          if (vLbl) vLbl.setAttribute('value', 'VISITOR');
+          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 1.4; camera: #cam');
+          if (scene) scene.setAttribute('vr-placer', 'disabled: true');
+        } else {
+          // BUILD: re-enable placer, builder speed
+          if (vBtn) vBtn.setAttribute('material', 'color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat');
+          if (vLbl) vLbl.setAttribute('value', 'BUILD');
+          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 0.8; camera: #cam');
+          if (scene) scene.setAttribute('vr-placer', 'disabled: false');
+        }
+      };
+      var vBtn2 = document.querySelector('#visitor-btn');
+      if (vBtn2) vBtn2.addEventListener('click', window.toggleVisitorMode);
 
       // Reset map — two-gaze confirmation
       var resetBtn  = document.querySelector('#reset-btn');
@@ -1167,8 +1248,8 @@
 <body>
 <a-scene
   draco-loader
-  coord-capture
   star-field
+  boundary-collider
   vr-placer
   fog="type: linear; color: #b0c8e8; near: 60; far: 120"
   renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
@@ -1219,6 +1300,22 @@
             color="#445566" width="1.8" material="shader:flat"></a-text>
     <a-text id="version-label" value="" position="0 1.12 0" align="center"
             color="#334455" width="1.6" material="shader:flat"></a-text>
+  </a-entity>
+
+  <!-- ═══ VISITOR MODE button — switches to walk/test mode ═══ -->
+  <a-entity position="10.9 0 -33">
+    <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
+           material="color:#223322; shader:flat"></a-box>
+    <a-box class="btn" id="visitor-btn"
+           width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
+           material="color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat">
+    </a-box>
+    <a-text id="visitor-lbl" value="VISITOR MODE" position="0 1.42 0" align="center"
+            color="#aaffaa" width="2.5" material="shader:flat"></a-text>
+    <a-text value="(look 1.5s)" position="0 1.27 0" align="center"
+            color="#445566" width="1.8" material="shader:flat"></a-text>
+    <a-text id="visitor-sub" value="BUILD" position="0 1.12 0" align="center"
+            color="#556644" width="1.6" material="shader:flat"></a-text>
   </a-entity>
 
   <!-- ═══ RESET MAP button — two-step confirmation ═══ -->
