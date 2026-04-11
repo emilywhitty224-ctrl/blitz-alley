@@ -353,8 +353,13 @@
         self.cloneCounts       = {};
         self.nightMode         = false;
         self._playerRotLock    = null; // locks rig Y rotation while gripping
+        self._playerPosLock    = null; // locks rig XZ position while gripping
         self._rigEl            = null; // cached in scene loaded
         self._rightCtrlEl      = null; // cached for direct gamepad polling
+        self._lockedBuildings  = {};   // id → true for locked buildings
+        self._lockPending      = null; // building awaiting lock confirmation
+        self._lockPendingTimer = 0;
+        self._aLastTap         = 0;    // timestamp of last A press
         // Pre-allocate tick vectors — never new() inside tick
         self._tickOrigin  = new THREE.Vector3();
         self._tickDir     = new THREE.Vector3();
@@ -463,8 +468,11 @@
             rightCtrl.addEventListener('gripdown', function () {
               self.gripping = true;
               laserPivot.setAttribute('visible', 'true');
-              // Lock rig rotation so right stick can't spin the player
-              if (rigEl) self._playerRotLock = rigEl.object3D.rotation.y;
+              // Lock rig rotation + position so sticks can't move player while placing
+              if (rigEl) {
+                self._playerRotLock = rigEl.object3D.rotation.y;
+                self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
+              }
               try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0; camera: #cam'); } catch(e) {}
               if (self.hovered) {
                 self.history.push({
@@ -497,15 +505,37 @@
             });
 
             rightCtrl.addEventListener('gripup', function () {
+              var justReleased = self.held;
               self.gripping = false;
               self.moving   = false;
               self.held     = null;
+              self.hovered  = null; // clear stale hover
               self.stickX   = 0;
               self.heightY  = 0;
               self.scaleY   = 0;
               laserPivot.setAttribute('visible', 'false');
               self._playerRotLock = null;
+              self._playerPosLock = null;
               try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0.8; camera: #cam'); } catch(e) {}
+              // Rebuild bbox for just-released building (catches scale/position changes)
+              if (justReleased) {
+                requestAnimationFrame(function () {
+                  var id  = justReleased.getAttribute('data-name');
+                  var box = new THREE.Box3().setFromObject(justReleased.object3D);
+                  self.bboxCache[id] = { el: justReleased, box: box, lastPos: justReleased.object3D.position.clone() };
+                  self.bboxKeys = Object.keys(self.bboxCache);
+                });
+              }
+              // Auto-save layout to localStorage
+              try {
+                var layout = {};
+                document.querySelectorAll('.placeable').forEach(function (el) {
+                  var id = el.getAttribute('data-name');
+                  var p  = el.object3D.position;
+                  layout[id] = { x: p.x, y: p.y, z: p.z, rotY: el.object3D.rotation.y, scale: el.object3D.scale.x };
+                });
+                localStorage.setItem('blitz-layout', JSON.stringify(layout));
+              } catch(e) {}
             });
 
             rightCtrl.addEventListener('triggerdown', function () {
@@ -755,7 +785,38 @@
           // ── Right A: floor snap | Right thumbstick click: clone ───────
           if (rightCtrl) {
             rightCtrl.addEventListener('abuttondown', function () {
-              if (self.held) self.held.object3D.position.y = 0;
+              if (self.held) {
+                // Floor snap
+                self.held.object3D.position.y = 0;
+                return;
+              }
+              // No building held — use double-tap A to lock/unlock hovered building
+              var now = Date.now();
+              var target = self.hovered || self._lockPending;
+              if (!target) return;
+              var id = target.getAttribute('data-name');
+              if (self._lockPending && self._lockPending === target && (now - self._aLastTap) < 2000) {
+                // Second tap — confirm lock/unlock
+                var wasLocked = self._lockedBuildings[id];
+                if (wasLocked) {
+                  delete self._lockedBuildings[id];
+                  target.object3D.traverse(function(o) { if (o.isMesh) o.material && (o.material.opacity = 1, o.material.transparent = false); });
+                  if (self.outText) self.outText.setAttribute('value', id + ': UNLOCKED');
+                } else {
+                  self._lockedBuildings[id] = true;
+                  target.object3D.traverse(function(o) { if (o.isMesh && o.material) { o.material.transparent = true; o.material.opacity = 0.5; } });
+                  if (self.outText) self.outText.setAttribute('value', id + ': LOCKED');
+                }
+                self._lockPending = null;
+                self._lockPendingTimer = 120; // clear message after ~2s
+              } else {
+                // First tap — ask for confirmation
+                self._lockPending = target;
+                self._lockPendingTimer = 180; // auto-cancel after ~3s
+                var isLocked = self._lockedBuildings[id];
+                if (self.outText) self.outText.setAttribute('value', (isLocked ? 'UNLOCK ' : 'LOCK ') + id + '?\nTap A again to confirm');
+              }
+              self._aLastTap = now;
             });
             rightCtrl.addEventListener('thumbstickdown', function () {
               cloneHeld();
@@ -769,10 +830,21 @@
         if (!this.laserPivot) return;
         this.frameCount++;
 
-        // Lock rig Y rotation every frame while gripping — prevents movement-controls
-        // from applying right-stick turn while the user is spinning a building
-        if (this._playerRotLock !== null && this._rigEl) {
+        // Lock rig rotation + position every frame while gripping
+        if (this._rigEl && this._playerRotLock !== null) {
           this._rigEl.object3D.rotation.y = this._playerRotLock;
+        }
+        if (this._rigEl && this._playerPosLock !== null) {
+          this._rigEl.object3D.position.x = this._playerPosLock.x;
+          this._rigEl.object3D.position.z = this._playerPosLock.z;
+        }
+        // Lock pending confirmation countdown
+        if (this._lockPendingTimer > 0) {
+          this._lockPendingTimer--;
+          if (this._lockPendingTimer === 0) {
+            this._lockPending = null;
+            if (this.outText) this.outText.setAttribute('value', '');
+          }
         }
 
         try {
@@ -795,6 +867,8 @@
           for (var i = 0; i < keys.length; i++) {
             var entry = cache[keys[i]];
             if (!entry || !entry.el) continue;
+            // Skip locked buildings
+            if (this._lockedBuildings[keys[i]]) continue;
             var cur   = entry.el.object3D.position;
             var last  = entry.lastPos;
             tmpBox.copy(entry.box);
