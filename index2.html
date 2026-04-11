@@ -364,6 +364,8 @@
         self._leftDir     = new THREE.Vector3();
         self._leftDist    = new THREE.Vector3();
         self._leftQuat    = new THREE.Quaternion();
+        self._spinPivot   = new THREE.Vector3(); // world-space XZ pivot for rotation
+        self._spinOffset  = new THREE.Vector3(); // object centre relative to pivot
 
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
@@ -473,6 +475,24 @@
                   scale: self.hovered.object3D.scale.x
                 });
                 self.held = self.hovered;
+                // Compute spin pivot: where the laser ray hits the ground plane (Y=0)
+                // projected below the laser's aim point at the building bbox
+                laserPivot.object3D.getWorldPosition(self._tickOrigin);
+                laserPivot.object3D.getWorldQuaternion(self.tmpQuat);
+                self._tickDir.set(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
+                // t = distance along ray to Y=0
+                var tGrip = (self._tickDir.y !== 0)
+                  ? -self._tickOrigin.y / self._tickDir.y
+                  : 5; // fallback 5m ahead
+                if (tGrip < 0.5) tGrip = 5;
+                self._spinPivot.copy(self._tickOrigin).addScaledVector(self._tickDir, tGrip);
+                self._spinPivot.y = 0;
+                // Offset = object centre - pivot (XZ only)
+                self._spinOffset.set(
+                  self.held.object3D.position.x - self._spinPivot.x,
+                  0,
+                  self.held.object3D.position.z - self._spinPivot.z
+                );
               }
             });
 
@@ -799,8 +819,8 @@
             var t = -this._tickOrigin.y / this._tickDir.y;
             if (t > 0.3) {
               this.groundPt.copy(this._tickOrigin).addScaledVector(this._tickDir, t);
-              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.07;
-              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.07;
+              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.035;
+              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.035;
             }
           }
         }
@@ -816,9 +836,17 @@
           }
         }
 
-        // ── Spin — right stick X ────────────────────────────────────────
+        // ── Spin — right stick X, pivoting around laser hit point ──────
         if (Math.abs(this.stickX) > 0.15) {
-          this.held.object3D.rotation.y += this.stickX * 0.055;
+          var dA  = this.stickX * 0.02;
+          this.held.object3D.rotation.y += dA;
+          // Orbit object centre around spin pivot
+          var cos = Math.cos(dA), sin = Math.sin(dA);
+          var ox  = this._spinOffset.x, oz = this._spinOffset.z;
+          this._spinOffset.x = ox * cos - oz * sin;
+          this._spinOffset.z = ox * sin + oz * cos;
+          this.held.object3D.position.x = this._spinPivot.x + this._spinOffset.x;
+          this.held.object3D.position.z = this._spinPivot.z + this._spinOffset.z;
         }
 
         // ── Scale — right stick Y: up = bigger, down = smaller ─────────
