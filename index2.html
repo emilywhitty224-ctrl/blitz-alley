@@ -62,33 +62,70 @@
     // No-op kept so attribute doesn't throw if still present on entities
     AFRAME.registerComponent('victorian-night', { init: function () {} });
 
-    // ── NIGHT TINT ───────────────────────────────────────────────────────
-    // Photogrammetry GLBs have daylight baked into their textures — scene
-    // lighting alone can't darken them. This component multiplies every
-    // material's colour down after load, giving a genuine night appearance.
-    // 'brightness' (0–1): how dark. 0.12 ≈ deep night. 'blue' adds moonlight tint.
-    AFRAME.registerComponent('night-tint', {
-      schema: { brightness: { default: 0.12 }, blue: { default: 1.25 } },
+    // ── DYNAMIC NIGHT TINT ──────────────────────────────────────────────
+    // Caches original material colours on load, then applies/removes night
+    // darkening whenever toggleNight() is called. Works on all .placeable
+    // buildings including newly cloned ones.
+    window._nightAware = []; // registry of all night-aware model instances
+    AFRAME.registerComponent('night-aware', {
       init: function () {
-        var data = this.data;
-        this.el.addEventListener('model-loaded', function () {
-          this.el.object3D.traverse(function (node) {
+        var self = this;
+        self._origColors = []; // { mat, r, g, b, er, eg, eb }
+        self._ready = false;
+        self.el.addEventListener('model-loaded', function () {
+          self._origColors = [];
+          self.el.object3D.traverse(function (node) {
             if (!node.isMesh) return;
             var mats = Array.isArray(node.material) ? node.material : [node.material];
             mats.forEach(function (mat) {
-              mat.color.r *= data.brightness * 0.85;
-              mat.color.g *= data.brightness * 0.9;
-              mat.color.b *= data.brightness * data.blue;
-              if (mat.emissive) {
-                mat.emissive.r *= 0.05;
-                mat.emissive.g *= 0.05;
-                mat.emissive.b *= 0.05;
-              }
+              self._origColors.push({
+                mat: mat,
+                r: mat.color.r, g: mat.color.g, b: mat.color.b,
+                er: mat.emissive ? mat.emissive.r : 0,
+                eg: mat.emissive ? mat.emissive.g : 0,
+                eb: mat.emissive ? mat.emissive.b : 0
+              });
             });
           });
-        }.bind(this));
+          self._ready = true;
+          // If night mode is already on when the model loads, tint immediately
+          if (window._nightMode) self.applyNight(true);
+        });
+        window._nightAware.push(self);
+      },
+      applyNight: function (on) {
+        if (!this._ready) return;
+        var br = 0.13, bl = 1.25;
+        this._origColors.forEach(function (c) {
+          if (on) {
+            c.mat.color.r = c.r * br * 0.85;
+            c.mat.color.g = c.g * br * 0.9;
+            c.mat.color.b = c.b * br * bl;
+            if (c.mat.emissive) {
+              c.mat.emissive.r = c.er * 0.05;
+              c.mat.emissive.g = c.eg * 0.05;
+              c.mat.emissive.b = c.eb * 0.05;
+            }
+          } else {
+            c.mat.color.r = c.r;
+            c.mat.color.g = c.g;
+            c.mat.color.b = c.b;
+            if (c.mat.emissive) {
+              c.mat.emissive.r = c.er;
+              c.mat.emissive.g = c.eg;
+              c.mat.emissive.b = c.eb;
+            }
+          }
+          c.mat.needsUpdate = true;
+        });
+      },
+      remove: function () {
+        var i = window._nightAware.indexOf(this);
+        if (i !== -1) window._nightAware.splice(i, 1);
       }
     });
+    // Legacy no-op — kept so old night-tint attributes don't throw
+    AFRAME.registerComponent('night-tint', { init: function () {} });
 
     // ── GROUND CLAMP (raycast) ───────────────────────────────────────────
     // Casts a 5×5 grid of rays downward through the model's footprint.
@@ -372,6 +409,9 @@
         self._leftQuat    = new THREE.Quaternion();
         self._spinPivot   = new THREE.Vector3(); // world-space XZ pivot for rotation
         self._spinOffset  = new THREE.Vector3(); // object centre relative to pivot
+        self._nudgeX      = false; // left stick X was above threshold last frame
+        self._nudgeZ      = false; // left stick Y was above threshold last frame
+        self._leftCtrlEl  = null;  // cached for left gamepad polling
 
         this.el.sceneEl.addEventListener('loaded', function () {
           var cam       = document.querySelector('#cam');
@@ -379,6 +419,7 @@
           self._rigEl   = rigEl;
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           self._rightCtrlEl = rightCtrl;
+          self._leftCtrlEl  = leftCtrl;
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
 
           // ── Store originals + build bbox cache after models settle ──
@@ -744,6 +785,7 @@
 
             var clone = document.createElement('a-entity');
             clone.setAttribute('class', 'placeable');
+            clone.setAttribute('night-aware', '');
             clone.setAttribute('data-name', newName);
             clone.setAttribute('gltf-model', self.held.getAttribute('gltf-model'));
             var p = self.held.object3D.position;
@@ -918,7 +960,7 @@
           }
         }
 
-        // ── Poll gamepad directly — events miss held positions ─────────
+        // ── Poll gamepads directly — events miss held positions ───────────
         if (this.gripping && this._rightCtrlEl) {
           var tc = this._rightCtrlEl.components['tracked-controls-webxr'] ||
                    this._rightCtrlEl.components['tracked-controls'];
@@ -926,6 +968,17 @@
           if (gp && gp.axes.length >= 4) {
             this.stickX = gp.axes[2];
             this.scaleY = gp.axes[3];
+          }
+        }
+        // Poll left gamepad for nudge
+        var leftNudgeX = 0, leftNudgeZ = 0;
+        if (this.gripping && this._leftCtrlEl) {
+          var ltc = this._leftCtrlEl.components['tracked-controls-webxr'] ||
+                    this._leftCtrlEl.components['tracked-controls'];
+          var lgp = ltc && ltc.controller && ltc.controller.gamepad;
+          if (lgp && lgp.axes.length >= 4) {
+            leftNudgeX = lgp.axes[2]; // left stick X
+            leftNudgeZ = lgp.axes[3]; // left stick Y (forward/back = Z)
           }
         }
 
@@ -940,6 +993,21 @@
           this._spinOffset.z = ox * sin + oz * cos;
           this.held.object3D.position.x = this._spinPivot.x + this._spinOffset.x;
           this.held.object3D.position.z = this._spinPivot.z + this._spinOffset.z;
+        }
+
+        // ── Nudge — left stick X/Z, only when NOT trigger-moving and NOT left-gripping
+        // Edge-triggered: one 0.1m step per stick deflection, not continuous
+        if (!this.moving && !this.leftGripping) {
+          var NUDGE = 0.1;
+          var nxOn = Math.abs(leftNudgeX) > 0.5;
+          var nzOn = Math.abs(leftNudgeZ) > 0.5;
+          if (nxOn && !this._nudgeX) this.held.object3D.position.x += (leftNudgeX > 0 ? NUDGE : -NUDGE);
+          if (nzOn && !this._nudgeZ) this.held.object3D.position.z += (leftNudgeZ > 0 ? NUDGE : -NUDGE);
+          this._nudgeX = nxOn;
+          this._nudgeZ = nzOn;
+        } else {
+          this._nudgeX = false;
+          this._nudgeZ = false;
         }
 
         // ── Scale — right stick Y: up = bigger, down = smaller ─────────
@@ -1032,6 +1100,8 @@
         scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
         if (btn) btn.setAttribute('material', 'color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat');
       }
+      // Apply/remove night tint on all registered buildings
+      (window._nightAware || []).forEach(function (c) { c.applyNight(window._nightMode); });
     };
 
     // Wire up buttons (gaze fuse fires 'click')
@@ -1221,67 +1291,67 @@
 
   <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
   <!-- Gatehouse straight ahead on load. Others staged to the right. -->
-  <a-entity class="placeable" data-name="gatehouse" id="b-gatehouse"
+  <a-entity class="placeable" night-aware data-name="gatehouse" id="b-gatehouse"
     gltf-model="#gatehouse-glb"
     position="0 0 -45" rotation="0 0 0" scale="0.232 0.232 0.232">
   </a-entity>
 
-  <a-entity class="placeable" data-name="blackfriar" id="b-blackfriar"
+  <a-entity class="placeable" night-aware data-name="blackfriar" id="b-blackfriar"
     gltf-model="#blackfriar-glb"
     position="20 0 -45" rotation="0 0 0" scale="0.694 0.694 0.694">
   </a-entity>
 
-  <a-entity class="placeable" data-name="princelet" id="b-princelet"
+  <a-entity class="placeable" night-aware data-name="princelet" id="b-princelet"
     gltf-model="#princelet-glb"
     position="40 0 -45" rotation="0 0 0" scale="1.404 1.404 1.404">
   </a-entity>
 
-  <a-entity class="placeable" data-name="factory" id="b-factory"
+  <a-entity class="placeable" night-aware data-name="factory" id="b-factory"
     gltf-model="#factory-glb"
     position="60 0 -45" rotation="0 0 0" scale="0.771 0.771 0.771">
   </a-entity>
 
-  <a-entity class="placeable" data-name="derelict-factory" id="b-derelict-factory"
+  <a-entity class="placeable" night-aware data-name="derelict-factory" id="b-derelict-factory"
     gltf-model="#derelict-factory-glb"
     position="80 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="victorian-pack" id="b-victorian-pack"
+  <a-entity class="placeable" night-aware data-name="victorian-pack" id="b-victorian-pack"
     gltf-model="#victorian-pack-glb"
     position="100 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="brick-wall" id="b-brick-wall"
+  <a-entity class="placeable" night-aware data-name="brick-wall" id="b-brick-wall"
     gltf-model="#brick-wall-glb"
     position="120 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="rubble" id="b-rubble"
+  <a-entity class="placeable" night-aware data-name="rubble" id="b-rubble"
     gltf-model="#rubble-glb"
     position="140 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="old-lamp" id="b-old-lamp"
+  <a-entity class="placeable" night-aware data-name="old-lamp" id="b-old-lamp"
     gltf-model="#old-lamp-glb"
     position="160 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="antique-shop" id="b-antique-shop"
+  <a-entity class="placeable" night-aware data-name="antique-shop" id="b-antique-shop"
     gltf-model="#antique-shop-glb"
     position="180 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="victorian-fence" id="b-victorian-fence"
+  <a-entity class="placeable" night-aware data-name="victorian-fence" id="b-victorian-fence"
     gltf-model="#victorian-fence-glb"
     position="200 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="victorian-street" id="b-victorian-street"
+  <a-entity class="placeable" night-aware data-name="victorian-street" id="b-victorian-street"
     gltf-model="#victorian-street-glb"
     position="220 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <a-entity class="placeable" data-name="gunnersbury-arch" id="b-gunnersbury-arch"
+  <a-entity class="placeable" night-aware data-name="gunnersbury-arch" id="b-gunnersbury-arch"
     gltf-model="#gunnersbury-arch-glb"
     position="240 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
