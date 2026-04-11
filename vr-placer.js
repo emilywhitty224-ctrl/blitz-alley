@@ -289,8 +289,8 @@ AFRAME.registerComponent('vr-placer', {
     self._locoFwd     = new THREE.Vector3();
     self._locoRight   = new THREE.Vector3();
     self._locoCQ           = new THREE.Quaternion();
-    self._lastHovered      = null;
-    self._triggerGripping  = false;
+    self._lastHovered = null;
+    window._vrPlacerHeld = false; // used by radial-menu to block wheel when building is held
 
     // ── Hover glow helper — subtle cyan emissive boost, restores on exit ─
     self._setHoverGlow = function (el, on) {
@@ -451,6 +451,7 @@ AFRAME.registerComponent('vr-placer', {
             self._lastHovered = null;
             if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
             self.held = self.hovered;
+            window._vrPlacerHeld = true;
             self._haptic(rightCtrl, 0.6, 100); // strong grab buzz
             // Spin pivot = building centre XZ — rotates around its own axis
             self._spinPivot.set(
@@ -482,7 +483,13 @@ AFRAME.registerComponent('vr-placer', {
           laserPivot.setAttribute('visible', 'false');
           self._playerRotLock = null;
           self._playerPosLock = null;
+          window._vrPlacerHeld = false;
           if (justReleased) {
+            // Grid snap — round X and Z to nearest 0.5 m
+            if (window._gridSnap) {
+              justReleased.object3D.position.x = Math.round(justReleased.object3D.position.x / 0.5) * 0.5;
+              justReleased.object3D.position.z = Math.round(justReleased.object3D.position.z / 0.5) * 0.5;
+            }
             self._haptic(rightCtrl, 0.2, 50); // soft release buzz
             requestAnimationFrame(function () {
               var id  = justReleased.getAttribute('data-name');
@@ -513,14 +520,6 @@ AFRAME.registerComponent('vr-placer', {
               0,
               self.held.object3D.position.z - self._tickOrigin.z
             );
-          } else if (!self.gripping && !self.held) {
-            // Trigger-only grab: show laser so auto-grab can fire in tick
-            self._triggerGripping = true;
-            laserPivot.setAttribute('visible', 'true');
-            if (rigEl) {
-              self._playerRotLock = rigEl.object3D.rotation.y;
-              self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
-            }
           }
           if (self._btnPts) {
             // Button ray: controller forward direction (NOT the 45°-down laser)
@@ -537,36 +536,7 @@ AFRAME.registerComponent('vr-placer', {
           }
         });
         rightCtrl.addEventListener('triggerup', function () {
-          if (self._triggerGripping && !self.gripping) {
-            // Release trigger-grab
-            self._triggerGripping = false;
-            var justReleased = self.held;
-            self.moving   = false;
-            self.held     = null;
-            self.hovered  = null;
-            self._playerRotLock = null;
-            self._playerPosLock = null;
-            laserPivot.setAttribute('visible', 'false');
-            if (justReleased) {
-              self._haptic(rightCtrl, 0.2, 50);
-              requestAnimationFrame(function () {
-                var id  = justReleased.getAttribute('data-name');
-                var box = new THREE.Box3().setFromObject(justReleased.object3D);
-                self.bboxCache[id] = { el: justReleased, box: box, lastPos: justReleased.object3D.position.clone() };
-                self.bboxKeys = Object.keys(self.bboxCache);
-              });
-              try {
-                var layout = {};
-                document.querySelectorAll('.placeable').forEach(function (el) {
-                  var id3 = el.getAttribute('data-name');
-                  var p3  = el.object3D.position;
-                  layout[id3] = { x: p3.x, y: p3.y, z: p3.z, rotY: el.object3D.rotation.y, scale: el.object3D.scale.x };
-                });
-                localStorage.setItem('blitz-layout', JSON.stringify(layout));
-              } catch(e) {}
-            }
-          }
-          // If grip is active, moving continues (drag from grip is not affected by triggerup)
+          // Moving continues from grip — trigger release has no effect on held building
         });
 
         rightCtrl.addEventListener('thumbstickmoved', function (e) {
@@ -622,16 +592,24 @@ AFRAME.registerComponent('vr-placer', {
           self._aLastTap = now;
         });
 
-        // Right stick click while holding — cycle tool mode
-        // Normal → Tilt → Height → Normal
+        // Right stick click — reset held building scale + rotation to original spawn values
         rightCtrl.addEventListener('thumbstickdown', function () {
           if (self.held) {
-            self._toolMode = (self._toolMode + 1) % 3;
-            var modeNames = ['NORMAL  (spin + scale)', 'TILT  (lean X / Z)', 'HEIGHT  (raise / lower)'];
+            var id0  = self.held.getAttribute('data-name');
+            var orig = self.originals[id0];
+            if (orig) {
+              self.held.object3D.scale.setScalar(orig.scale);
+              self.held.object3D.rotation.set(0, orig.rotY, 0);
+            } else {
+              // No original recorded — just level it
+              self.held.object3D.rotation.x = 0;
+              self.held.object3D.rotation.z = 0;
+            }
+            self._haptic(rightCtrl, 0.35, 60);
             if (self.readout) {
-              self.readout.setAttribute('text', 'value', modeNames[self._toolMode]);
+              self.readout.setAttribute('text', 'value', 'reset ↺');
               self.readout.setAttribute('visible', 'true');
-              self.readoutTimer = 150;
+              self.readoutTimer = 90;
             }
           } else {
             cloneHeld();
@@ -664,17 +642,35 @@ AFRAME.registerComponent('vr-placer', {
           if (!self.gripping) self._playerPosLock = null;
         });
 
-        // X + Right grip — reset held building to original position
+        // X — delete hovered or held building (removes from scene + all caches)
         leftCtrl.addEventListener('xbuttondown', function () {
-          if (self.gripping && self.held) {
-            var id   = self.held.getAttribute('data-name');
-            var orig = self.originals[id];
-            if (orig) {
-              self.held.object3D.position.x = orig.x;
-              self.held.object3D.position.z = orig.z;
-              self.held.object3D.rotation.y = orig.rotY;
-              self.held.object3D.scale.setScalar(orig.scale);
-            }
+          var target = self.held || self.hovered;
+          if (!target) return;
+          var delId = target.getAttribute('data-name');
+          // Release grip state if we're holding it
+          if (self.held === target) {
+            self.held     = null;
+            self.gripping = false;
+            self.moving   = false;
+            window._vrPlacerHeld = false;
+            laserPivot.setAttribute('visible', 'false');
+            self._playerRotLock = null;
+            self._playerPosLock = null;
+          }
+          self.hovered = null;
+          // Remove from bboxCache, originals, history
+          delete self.bboxCache[delId];
+          delete self.originals[delId];
+          self.bboxKeys = Object.keys(self.bboxCache);
+          self.history     = self.history.filter(function (h) { return h.el !== target; });
+          self.redoHistory = self.redoHistory.filter(function (h) { return h.el !== target; });
+          // Remove from DOM
+          if (target.parentNode) target.parentNode.removeChild(target);
+          self._haptic(rightCtrl, 0.5, 80);
+          if (self.readout) {
+            self.readout.setAttribute('text', 'value', 'deleted  ' + delId);
+            self.readout.setAttribute('visible', 'true');
+            self.readoutTimer = 90;
           }
         });
 
@@ -701,6 +697,13 @@ AFRAME.registerComponent('vr-placer', {
           outPanel.setAttribute('visible', 'true');
           outText.setAttribute('visible',  'true');
           if (navigator.clipboard) navigator.clipboard.writeText(lines).catch(function(){});
+          // Haptic + HUD toast
+          self._haptic(leftCtrl, 0.5, 150);
+          if (self.readout) {
+            self.readout.setAttribute('text', 'value', 'Layout Copied ✓');
+            self.readout.setAttribute('visible', 'true');
+            self.readoutTimer = 200;
+          }
           try {
             var layout = {};
             document.querySelectorAll('.placeable').forEach(function (el) {
@@ -954,8 +957,8 @@ AFRAME.registerComponent('vr-placer', {
       }
       this.hovered = newHovered;
 
-      // Auto-grab: if laser is active and we just swept over a building, grab it
-      if ((this.gripping || this._triggerGripping) && !this.held && this.hovered) {
+      // Auto-grab: grip is held but nothing in hand yet — snap to first building laser touches
+      if (this.gripping && !this.held && this.hovered) {
         var _agId = this.hovered.getAttribute('data-name');
         if (!this._lockedBuildings[_agId]) {
           this.history.push({
@@ -1026,14 +1029,17 @@ AFRAME.registerComponent('vr-placer', {
       }
     }
 
-    // ── Tool modes — cycled with right stick click while holding ─────────
-    // Mode 0 Normal: right stick X = spin, Y = scale
-    // Mode 1 Tilt:   right stick X = lean Z, Y = lean X (A to snap level)
-    // Mode 2 Height: right stick Y = raise/lower
-    this._tiltMode = (this._toolMode === 1);
+    // ── Stick modes ──────────────────────────────────────────────────────────
+    // Normal:               right stick X = rotate, Y = scale
+    // Left trigger (shift): right stick X/Y = tilt (lean X/Z)
+    // Left grip (vertical): left stick Y = raise/lower held building
+    // Panel TILT/HEIGHT buttons still work as overrides if needed
+    this._tiltMode = (this._toolMode === 1) || window._leftTriggerShift;
 
-    if (this._toolMode === 1) {
-      // ── TILT MODE ────────────────────────────────────────────────────────
+    var adjusting = false;
+
+    if (window._leftTriggerShift || this._toolMode === 1) {
+      // ── TILT (left trigger shift OR panel TILT button) ───────────────────
       if (Math.abs(this.stickX) > 0.15)
         this.held.object3D.rotation.z += this.stickX * 0.018;
       if (Math.abs(this.scaleY) > 0.15)
@@ -1043,12 +1049,12 @@ AFRAME.registerComponent('vr-placer', {
         var rz = THREE.MathUtils.radToDeg(this.held.object3D.rotation.z);
         var isLevel = Math.abs(rx) < 1.5 && Math.abs(rz) < 1.5;
         this.readout.setAttribute('text', 'value',
-          (isLevel ? '✓ LEVEL' : 'tilt  X:' + rx.toFixed(1) + '°  Z:' + rz.toFixed(1) + '°'));
+          (isLevel ? 'LEVEL ✓' : 'tilt  X:' + rx.toFixed(1) + '°  Z:' + rz.toFixed(1) + '°'));
         this.readout.setAttribute('visible', 'true');
         this.readoutTimer = 6;
       }
     } else if (this._toolMode === 2) {
-      // ── HEIGHT MODE ──────────────────────────────────────────────────────
+      // ── HEIGHT (panel HEIGHT button — legacy) ────────────────────────────
       if (Math.abs(this.scaleY) > 0.15) {
         this.held.object3D.position.y -= this.scaleY * 0.007;
         if (this.readout && this.frameCount % 6 === 0) {
@@ -1059,27 +1065,17 @@ AFRAME.registerComponent('vr-placer', {
           this.readoutTimer = 60;
         }
       }
-      // Spin still works in height mode
-      if (Math.abs(this.stickX) > 0.15) {
+      if (Math.abs(this.stickX) > 0.15)
         this.held.object3D.rotation.y += this.stickX * 0.02;
-      }
     } else {
-      // ── NORMAL MODE ──────────────────────────────────────────────────────
-      // Spin — right stick X around building centre
+      // ── NORMAL — rotate + scale ──────────────────────────────────────────
       if (Math.abs(this.stickX) > 0.15) {
         this.held.object3D.rotation.y += this.stickX * 0.02;
-        // Keep spinPivot in sync with building (centre-pivot, offset always 0)
-        this._spinPivot.set(
-          this.held.object3D.position.x, 0,
-          this.held.object3D.position.z
-        );
+        this._spinPivot.set(this.held.object3D.position.x, 0, this.held.object3D.position.z);
       }
-
-      // Scale — right stick Y
-      var adjusting = false;
       if (Math.abs(this.scaleY) > 0.15) {
-        var oldSc  = this.held.object3D.scale.x;
-        var ns     = Math.max(0.02, oldSc + this.scaleY * 0.002);
+        var oldSc = this.held.object3D.scale.x;
+        var ns    = Math.max(0.02, oldSc + this.scaleY * 0.002);
         this.held.object3D.scale.setScalar(ns);
         adjusting = true;
       }
@@ -1150,10 +1146,12 @@ AFRAME.registerComponent('vr-placer', {
       this.leftHovered = leftNew;
     }
 
-    if (this.leftGripping && this.leftHovered && Math.abs(this.heightY) > 0.15) {
-      this.leftHovered.object3D.position.y -= this.heightY * 0.007;
+    // Left grip = vertical mode: adjusts held building first, falls back to left-laser-hovered
+    var _heightTarget = this.held || this.leftHovered;
+    if (this.leftGripping && _heightTarget && Math.abs(this.heightY) > 0.15) {
+      _heightTarget.object3D.position.y -= this.heightY * 0.007;
       if (this.readout && this.frameCount % 6 === 0) {
-        var hy  = this.leftHovered.object3D.position.y.toFixed(2);
+        var hy  = _heightTarget.object3D.position.y.toFixed(2);
         var hlb = parseFloat(hy) >= 0 ? '+' + hy : hy;
         this.readout.setAttribute('text', 'value', 'floor offset  ' + hlb + ' m');
         this.readout.setAttribute('visible', 'true');
@@ -1201,7 +1199,8 @@ AFRAME.registerComponent('vr-placer', {
 //
 // Configure items via: window._radialMenuItems = [{ id, name, src, scale }, ...]
 // Add to scene: <a-scene radial-menu ...>
-window._radialMenuOpen = false;
+window._radialMenuOpen    = false;
+window._leftTriggerShift  = false; // true when left trigger held while building in right hand → tilt mode
 AFRAME.registerComponent('radial-menu', {
   init: function () {
     var self = this;
@@ -1213,17 +1212,33 @@ AFRAME.registerComponent('radial-menu', {
     self._labelEls   = [];
     self._pageLabel  = null;
     self._nameLabel  = null;
-    self._leftCtrlEl = null;
-    self._spawnCounts    = {};
+    self._leftCtrlEl  = null;
+    self._rightCtrlEl = null;
+    self._spawnCounts     = {};
     self._lastHighlighted = -1;
+    self._ghostEl   = null;  // semi-transparent preview at right controller position
+    self._ghostItem = null;  // which item is currently ghosted
+    self._ghostPos  = null;  // {x, z} world position snapped to floor when trigger released
 
     this.el.sceneEl.addEventListener('loaded', function () {
-      var leftCtrl = document.querySelector('[oculus-touch-controls*="left"]');
-      self._leftCtrlEl = leftCtrl;
+      var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
+      var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+      self._leftCtrlEl  = leftCtrl;
+      self._rightCtrlEl = rightCtrl;
       self._buildWheel();
+
+      // Ghost entity — semi-transparent building preview while wheel is open
+      self._ghostEl = document.createElement('a-entity');
+      self._ghostEl.setAttribute('visible', 'false');
+      self.el.sceneEl.appendChild(self._ghostEl);
 
       if (leftCtrl) {
         leftCtrl.addEventListener('triggerdown', function () {
+          // If a building is held in right hand, left trigger = tilt shift, not spawn wheel
+          if (window._vrPlacerHeld) {
+            window._leftTriggerShift = true;
+            return;
+          }
           self._open = true;
           window._radialMenuOpen = true;
           if (self._wheelEl) self._wheelEl.setAttribute('visible', 'true');
@@ -1232,12 +1247,16 @@ AFRAME.registerComponent('radial-menu', {
         });
 
         leftCtrl.addEventListener('triggerup', function () {
+          if (window._leftTriggerShift) {
+            window._leftTriggerShift = false;
+            return;
+          }
           // Use last-known highlight — stick may have snapped back to centre first
           var slot = self._highlighted >= 0 ? self._highlighted : self._lastHighlighted;
           if (slot >= 0) {
             var items = self._items();
             var item  = items[self._page * 8 + slot];
-            if (item) self._spawnItem(item);
+            if (item) self._spawnItem(item, self._ghostPos);
           }
           self._open            = false;
           self._lastHighlighted = -1;
@@ -1245,6 +1264,7 @@ AFRAME.registerComponent('radial-menu', {
           self._highlighted = -1;
           if (self._wheelEl) self._wheelEl.setAttribute('visible', 'false');
           if (self._nameLabel) self._nameLabel.setAttribute('text', 'value', '');
+          self._hideGhost();
         });
 
         // Thumbstick click while open → cycle page
@@ -1393,31 +1413,34 @@ AFRAME.registerComponent('radial-menu', {
     }
   },
 
-  _spawnItem: function (item) {
+  _spawnItem: function (item, ghostPos) {
     var cam = document.querySelector('#cam');
     var rig = document.querySelector('#rig');
     if (!cam || !rig) return;
 
-    // 2.5 m ahead in the direction the camera is facing, flattened to XZ
-    var fwd  = new THREE.Vector3(0, 0, -1);
-    var quat = new THREE.Quaternion();
-    cam.object3D.getWorldQuaternion(quat);
-    fwd.applyQuaternion(quat);
-    fwd.y = 0;
-    if (fwd.length() < 0.01) fwd.set(0, 0, -1);
-    fwd.normalize();
-
-    var rigPos = rig.object3D.position;
-    // Spiral offset so successive spawns don't stack — steps 2.5 m per slot
-    var _totalSpawned = 0;
-    var _sc = this._spawnCounts;
-    Object.keys(_sc).forEach(function (k) { _totalSpawned += _sc[k]; });
-    var _angle  = _totalSpawned * 2.399; // golden angle in radians
-    var _radius = 1.5 + _totalSpawned * 0.4;
-    var _sx = Math.cos(_angle) * _radius;
-    var _sz = Math.sin(_angle) * _radius;
-    var px = (rigPos.x + fwd.x * 3.0 + _sx).toFixed(2);
-    var pz = (rigPos.z + fwd.z * 3.0 + _sz).toFixed(2);
+    var px, pz;
+    if (ghostPos) {
+      // Spawn exactly where the ghost was (right controller floor position)
+      px = ghostPos.x.toFixed(2);
+      pz = ghostPos.z.toFixed(2);
+    } else {
+      // Fallback: spiral ahead of camera
+      var fwd  = new THREE.Vector3(0, 0, -1);
+      var quat = new THREE.Quaternion();
+      cam.object3D.getWorldQuaternion(quat);
+      fwd.applyQuaternion(quat);
+      fwd.y = 0;
+      if (fwd.length() < 0.01) fwd.set(0, 0, -1);
+      fwd.normalize();
+      var rigPos = rig.object3D.position;
+      var _totalSpawned = 0;
+      var _sc = this._spawnCounts;
+      Object.keys(_sc).forEach(function (k) { _totalSpawned += _sc[k]; });
+      var _angle  = _totalSpawned * 2.399;
+      var _radius = 1.5 + _totalSpawned * 0.4;
+      px = (rigPos.x + fwd.x * 3.0 + Math.cos(_angle) * _radius).toFixed(2);
+      pz = (rigPos.z + fwd.z * 3.0 + Math.sin(_angle) * _radius).toFixed(2);
+    }
 
     // Unique name: base + count
     this._spawnCounts[item.id] = (this._spawnCounts[item.id] || 0) + 1;
@@ -1509,7 +1532,45 @@ AFRAME.registerComponent('radial-menu', {
       var item = newHighlight >= 0 ? items[this._page * 8 + newHighlight] : null;
       if (this._nameLabel) this._nameLabel.setAttribute('text', 'value', item ? item.name : '');
       if (this._descLabel) this._descLabel.setAttribute('text', 'value', item ? (item.desc || '') : '');
+      // Update ghost preview
+      this._showGhost(item || null);
     }
+  },
+
+  _showGhost: function (item) {
+    if (!this._ghostEl) return;
+    if (!item) { this._hideGhost(); return; }
+    if (item === this._ghostItem) return; // same item already loaded
+    this._ghostItem = item;
+    this._ghostEl.setAttribute('gltf-model', item.src);
+    this._ghostEl.setAttribute('scale', item.scale + ' ' + item.scale + ' ' + item.scale);
+    this._ghostEl.setAttribute('visible', 'true');
+    // Make semi-transparent after the model finishes loading
+    this._ghostEl.addEventListener('model-loaded', function _onLoad() {
+      this._ghostEl.removeEventListener('model-loaded', _onLoad);
+      this._ghostEl.object3D.traverse(function (o) {
+        if (!o.isMesh || !o.material) return;
+        var mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(function (m) { m.transparent = true; m.opacity = 0.38; });
+      });
+    }.bind(this));
+  },
+
+  _hideGhost: function () {
+    this._ghostItem = null;
+    if (this._ghostEl) {
+      this._ghostEl.setAttribute('visible', 'false');
+      this._ghostEl.removeAttribute('gltf-model');
+    }
+  },
+
+  tick: function () {
+    if (!this._open || !this._ghostEl || !this._rightCtrlEl) return;
+    // Track ghost to the floor below the right controller
+    var wp = new THREE.Vector3();
+    this._rightCtrlEl.object3D.getWorldPosition(wp);
+    this._ghostEl.object3D.position.set(wp.x, 0, wp.z);
+    this._ghostPos = { x: wp.x, z: wp.z };
   }
 });
 
@@ -1539,11 +1600,12 @@ var _CP_ITEMS = [
   { id:'save',    label:'SAVE',    sub:'save layout',   fn:function(p){return p&&p.doSave?p.doSave():'';} },
   { id:'reset',   label:'RESET',   sub:'clear all',     special:'reset', fn:null },
   { id:'spawn',   label:'SPAWN',   sub:'L-trig: hold',  info:true, fn:null },
-  null,
+  { id:'grid',    label:'GRID',    sub:'0.5 m snap',    fn:function(){ window._gridSnap = !window._gridSnap; return window._gridSnap ? 'Grid snap  ON' : 'Grid snap  OFF'; } },
   null
 ];
 
 window._controlPanelOpen = false;
+window._gridSnap         = false; // when true, building positions snap to 0.5 m grid on release
 
 AFRAME.registerComponent('control-panel', {
   init: function () {
