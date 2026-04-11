@@ -345,10 +345,7 @@
               self.coords = [];
               hideHud();
             });
-            leftCtrl.addEventListener('xbuttondown', function () {
-              self.markersVisible = !self.markersVisible;
-              markersEl.setAttribute('visible', self.markersVisible ? 'true' : 'false');
-            });
+            // X button — reference markers removed
           }
         });
       }
@@ -655,10 +652,9 @@
               if (!self.gripping) self._playerPosLock = null;
             });
 
-            // Left X — stamp improved reference post  OR  reset held building
+            // Left X — reset held building to original position
             leftCtrl.addEventListener('xbuttondown', function () {
               if (self.gripping && self.held) {
-                // Reset to original position
                 var id   = self.held.getAttribute('data-name');
                 var orig = self.originals[id];
                 if (orig) {
@@ -667,53 +663,6 @@
                   self.held.object3D.rotation.y = orig.rotY;
                   self.held.object3D.scale.setScalar(orig.scale);
                 }
-              } else {
-                // Stamp reference post at left-controller position
-                var wp = new THREE.Vector3();
-                leftCtrl.object3D.getWorldPosition(wp);
-                var post = document.createElement('a-entity');
-                post.setAttribute('position', wp.x + ' 0 ' + wp.z);
-
-                // Main pole — 6m, white
-                var pole = document.createElement('a-box');
-                pole.setAttribute('width', '0.04'); pole.setAttribute('height', '6'); pole.setAttribute('depth', '0.04');
-                pole.setAttribute('position', '0 3 0');
-                pole.setAttribute('material', 'color:#cccccc; emissive:#aaaaaa; emissiveIntensity:0.6; shader:flat; opacity:0.9; transparent:true');
-                post.appendChild(pole);
-
-                // Floor base ring
-                var base = document.createElement('a-torus');
-                base.setAttribute('radius', '0.3'); base.setAttribute('radius-tubular', '0.02');
-                base.setAttribute('rotation', '-90 0 0');
-                base.setAttribute('position', '0 0.01 0');
-                base.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat');
-                post.appendChild(base);
-
-                // Metre markers with labels
-                var marks = [
-                  { y: 1,   color: '#ffee44', label: '1m' },
-                  { y: 2.1, color: '#ff8844', label: '2.1m  door' },
-                  { y: 3,   color: '#ff4444', label: '3m  1st floor' },
-                  { y: 4.5, color: '#ff88ff', label: '4.5m' },
-                  { y: 6,   color: '#88aaff', label: '6m  2nd floor' }
-                ];
-                marks.forEach(function (m) {
-                  var bar = document.createElement('a-box');
-                  bar.setAttribute('width', '0.6'); bar.setAttribute('height', '0.03'); bar.setAttribute('depth', '0.03');
-                  bar.setAttribute('position', '0.3 ' + m.y + ' 0');
-                  bar.setAttribute('material', 'color:' + m.color + '; emissive:' + m.color + '; emissiveIntensity:0.9; shader:flat');
-                  post.appendChild(bar);
-                  var txt = document.createElement('a-text');
-                  txt.setAttribute('value', m.label);
-                  txt.setAttribute('position', '0.65 ' + m.y + ' 0');
-                  txt.setAttribute('color', m.color);
-                  txt.setAttribute('width', '2.5');
-                  txt.setAttribute('align', 'left');
-                  txt.setAttribute('material', 'shader:flat');
-                  post.appendChild(txt);
-                });
-
-                self.el.sceneEl.appendChild(post);
               }
             });
 
@@ -1029,11 +978,19 @@
             this.held.object3D.position.z = this._spinPivot.z + this._spinOffset.z;
           }
 
-          // ── Scale — right stick Y: up = bigger, down = smaller ───────
+          // ── Scale — right stick Y, expands/contracts around laser aim point ──
           var adjusting = false;
           if (Math.abs(this.scaleY) > 0.15) {
-            var ns = Math.max(0.02, this.held.object3D.scale.x + this.scaleY * 0.002);
+            var oldSc  = this.held.object3D.scale.x;
+            var ns     = Math.max(0.02, oldSc + this.scaleY * 0.002);
+            var factor = ns / oldSc;
+            // Move object so the spin pivot (laser aim point) stays fixed
+            this.held.object3D.position.x = this._spinPivot.x + (this.held.object3D.position.x - this._spinPivot.x) * factor;
+            this.held.object3D.position.z = this._spinPivot.z + (this.held.object3D.position.z - this._spinPivot.z) * factor;
             this.held.object3D.scale.setScalar(ns);
+            // Keep spinOffset in sync
+            this._spinOffset.x = this.held.object3D.position.x - this._spinPivot.x;
+            this._spinOffset.z = this.held.object3D.position.z - this._spinPivot.z;
             adjusting = true;
           }
         }
@@ -1302,45 +1259,45 @@
 
   <!-- ── Controls card — grabbable, starts on the wall to the left of spawn ── -->
   <!-- Grab with right grip laser like any building. Hold it up to read. -->
+  <!-- Controls card — A5 portrait, grabbable, hanging left of spawn -->
   <a-entity class="placeable" data-name="controls-card" id="controls-card"
-            position="-3 1.4 -35" rotation="0 20 0">
-    <!-- Card backing — cream paper colour -->
-    <a-plane width="0.48" height="0.64"
+            position="-3 1.5 -35" rotation="0 20 0">
+    <a-plane width="0.21" height="0.30"
              material="color:#f5f0e8; shader:flat; side:double"></a-plane>
-    <!-- Header -->
-    <a-text value="CONTROLS" position="0 0.27 0.001" align="center"
-            color="#222222" width="1.7" material="shader:flat"></a-text>
-    <!-- RIGHT HAND section -->
-    <a-text value="RIGHT HAND" position="-0.21 0.20 0.001" align="left"
-            color="#007744" width="1.3" material="shader:flat"></a-text>
-    <a-text value="Grip            aim laser at building
-Grip+Trigger  drag to move
-L.Stick X/Z  nudge 10cm steps
-R.Stick L/R  spin (pivots on aim pt)
-R.Stick U/D  scale up / down
-Stick click   clone
-A button      snap to floor
-A x2          lock / unlock
-B button      fly on/off"
-            position="-0.215 0.08 0.001" align="left"
-            color="#333333" width="1.28" wrap-count="30"
-            material="shader:flat"></a-text>
-    <!-- LEFT HAND section -->
-    <a-text value="LEFT HAND" position="-0.21 -0.17 0.001" align="left"
-            color="#886600" width="1.3" material="shader:flat"></a-text>
-    <a-text value="Grip+Stick U/D  raise / lower
-Stick click    undo last move
-X button       stamp ref pole
-X+Right grip   reset building
-Y button       export / save"
-            position="-0.215 -0.26 0.001" align="left"
-            color="#333333" width="1.28" wrap-count="30"
-            material="shader:flat"></a-text>
-    <!-- World section -->
-    <a-text value="WORLD  Gaze at DAY/NIGHT or RESET MAP posts for 1.5s"
-            position="-0.215 -0.43 0.001" align="left"
-            color="#444466" width="1.28" wrap-count="30"
-            material="shader:flat"></a-text>
+    <!-- single text block, baseline top, tight wrap -->
+    <a-text
+      value="— CONTROLS —
+
+RIGHT HAND
+Grip: laser on / select
++ Trigger: move building
+L-Stick: nudge 10 cm
+R-Stick L/R: spin
+R-Stick U/D: scale
+Stick click: clone
+A: floor snap
+A x2: lock/unlock
+B: fly
+
+BOTH GRIPS
+R-Stick: tilt building
+
+LEFT HAND
+Grip + Stick U/D: height
+Stick click: undo
+X + R.Grip: reset pos
+Y: save / export
+
+WORLD
+Trigger at any post button"
+      position="-0.093 0.138 0.002"
+      align="left"
+      baseline="top"
+      width="0.19"
+      wrap-count="22"
+      color="#222222"
+      material="shader:flat">
+    </a-text>
   </a-entity>
 
   <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
