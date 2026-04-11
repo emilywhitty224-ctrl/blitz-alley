@@ -57,6 +57,22 @@
       (window._nightAware || []).forEach(function (c) { c.applyNight(window._nightMode); });
     };
 
+    // Visitor / walk mode toggle — defined here (top-level) so control-panel can call it at any time
+    window.toggleVisitorMode = function () {
+      window._visitorMode = !window._visitorMode;
+      var vBtn = document.querySelector('#visitor-btn');
+      var vLbl = document.querySelector('#visitor-sub');
+      if (window._visitorMode) {
+        // VISITOR: laser hidden by vr-placer tick, faster walk speed
+        if (vBtn) vBtn.setAttribute('material', 'color:#003300; emissive:#00ff44; emissiveIntensity:1; shader:flat');
+        if (vLbl) vLbl.setAttribute('value', 'VISITOR');
+      } else {
+        // BUILD: laser restored by vr-placer tick, builder speed
+        if (vBtn) vBtn.setAttribute('material', 'color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat');
+        if (vLbl) vLbl.setAttribute('value', 'BUILD');
+      }
+    };
+
     // Wire up buttons (gaze fuse fires 'click')
     document.addEventListener('DOMContentLoaded', function () {
       // Set version label on night button post
@@ -67,27 +83,7 @@
       var nightBtn = document.querySelector('#night-btn');
       if (nightBtn) nightBtn.addEventListener('click', window.toggleNight);
 
-      // Visitor / walk mode toggle
-      window.toggleVisitorMode = function () {
-        window._visitorMode = !window._visitorMode;
-        var vBtn = document.querySelector('#visitor-btn');
-        var vLbl = document.querySelector('#visitor-sub');
-        var scene = document.querySelector('a-scene');
-        var rig   = document.querySelector('#rig');
-        if (window._visitorMode) {
-          // VISITOR: disable placer laser, normal walk speed, hide builder UI
-          if (vBtn) vBtn.setAttribute('material', 'color:#003300; emissive:#00ff44; emissiveIntensity:1; shader:flat');
-          if (vLbl) vLbl.setAttribute('value', 'VISITOR');
-          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 0.35; camera: #cam');
-          if (scene) scene.setAttribute('vr-placer', 'disabled: true');
-        } else {
-          // BUILD: re-enable placer, builder speed
-          if (vBtn) vBtn.setAttribute('material', 'color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat');
-          if (vLbl) vLbl.setAttribute('value', 'BUILD');
-          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 0.2; camera: #cam');
-          if (scene) scene.setAttribute('vr-placer', 'disabled: false');
-        }
-      };
+      // Visitor button gaze-fuse click
       var vBtn2 = document.querySelector('#visitor-btn');
       if (vBtn2) vBtn2.addEventListener('click', window.toggleVisitorMode);
 
@@ -177,6 +173,64 @@
     <a-asset-item id="victorian-street-glb"    src="victorian_street_scene_c.glb"></a-asset-item>
     <a-asset-item id="gunnersbury-arch-glb"    src="gunnersbury_arch.glb"></a-asset-item>
   </a-assets>
+
+  <!-- ═══ STAGING AREA — all 13 assets pre-spawned, no ground-clamp ═══ -->
+  <!-- Placed in 2 rows behind the player spawn (Z=-40 and Z=-55), 8m apart in X -->
+  <!-- Player can walk over, grab with right grip, and drag into position -->
+
+  <!-- Row 1 — Z = -40 -->
+  <a-entity class="placeable" night-aware data-name="gatehouse-0"
+            gltf-model="#gatehouse-glb"
+            position="-24 0 -40" scale="0.232 0.232 0.232"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="blackfriar-0"
+            gltf-model="#blackfriar-glb"
+            position="-16 0 -40" scale="0.694 0.694 0.694"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="princelet-0"
+            gltf-model="#princelet-glb"
+            position="-8 0 -40" scale="1.404 1.404 1.404"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="factory-0"
+            gltf-model="#factory-glb"
+            position="0 0 -40" scale="0.771 0.771 0.771"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="derelict-fac-0"
+            gltf-model="#derelict-factory-glb"
+            position="8 0 -40" scale="1.0 1.0 1.0"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="vic-pack-0"
+            gltf-model="#victorian-pack-glb"
+            position="16 0 -40" scale="1.0 1.0 1.0"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="brick-wall-0"
+            gltf-model="#brick-wall-glb"
+            position="24 0 -40" scale="1.0 1.0 1.0"></a-entity>
+
+  <!-- Row 2 — Z = -55 -->
+  <a-entity class="placeable" night-aware data-name="rubble-0"
+            gltf-model="#rubble-glb"
+            position="-24 0 -55" scale="1.0 1.0 1.0"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="old-lamp-0"
+            gltf-model="#old-lamp-glb"
+            position="-16 0 -55" scale="1.0 1.0 1.0"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="antique-shop-0"
+            gltf-model="#antique-shop-glb"
+            position="-8 0 -55" scale="1.0 1.0 1.0"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="vic-fence-0"
+            gltf-model="#victorian-fence-glb"
+            position="0 0 -55" scale="1.0 1.0 1.0"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="vic-street-0"
+            gltf-model="#victorian-street-glb"
+            position="8 0 -55" scale="1.0 1.0 1.0"></a-entity>
+
+  <a-entity class="placeable" night-aware data-name="arch-0"
+            gltf-model="#gunnersbury-arch-glb"
+            position="16 0 -55" scale="1.0 1.0 1.0"></a-entity>
 
   <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
   <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>

@@ -741,7 +741,7 @@ AFRAME.registerComponent('vr-placer', {
         if (!name) return;
         var lbl = document.createElement('a-text');
         lbl.setAttribute('value', name);
-        lbl.setAttribute('position', '0 8 0');
+        lbl.setAttribute('position', '0 3 0');
         lbl.setAttribute('align', 'center');
         lbl.setAttribute('color', '#ffee88');
         lbl.setAttribute('width', '12');
@@ -803,6 +803,15 @@ AFRAME.registerComponent('vr-placer', {
     if (this._rigEl && this._playerPosLock !== null) {
       this._rigEl.object3D.position.x = this._playerPosLock.x;
       this._rigEl.object3D.position.z = this._playerPosLock.z;
+    }
+
+    // In visitor mode: hide laser, clear any hover/hold so buildings can't be moved
+    if (window._visitorMode) {
+      if (!this.gripping) this.laserPivot.setAttribute('visible', 'false');
+      this.hovered = null;
+      this.held    = null;
+      this.gripping = false;
+      this.moving  = false;
     }
 
     // Rolling bbox refresh — 1 building per frame to keep hover accurate
@@ -1282,7 +1291,6 @@ AFRAME.registerComponent('radial-menu', {
     var entity = document.createElement('a-entity');
     entity.setAttribute('class', 'placeable');
     entity.setAttribute('night-aware', '');
-    entity.setAttribute('ground-clamp', '');
     entity.setAttribute('data-name', name);
     entity.setAttribute('gltf-model', item.src);
     entity.setAttribute('position',   px + ' 0 ' + pz);
@@ -1308,7 +1316,7 @@ AFRAME.registerComponent('radial-menu', {
       // Floating name label
       var lbl = document.createElement('a-text');
       lbl.setAttribute('value', name);
-      lbl.setAttribute('position', '0 8 0');
+      lbl.setAttribute('position', '0 3 0');
       lbl.setAttribute('align', 'center');
       lbl.setAttribute('color', '#ffee88');
       lbl.setAttribute('width', '12');
