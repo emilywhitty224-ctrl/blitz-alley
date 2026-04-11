@@ -466,6 +466,7 @@ AFRAME.registerComponent('vr-placer', {
             self._spinPivot.set(self.held.object3D.position.x, 0, self.held.object3D.position.z);
             self._spinOffset.set(0, 0, 0);
             self.moving = true;
+            self._slowLastPos = null; // reset slow-mode delta tracking
           }
         });
 
@@ -484,6 +485,7 @@ AFRAME.registerComponent('vr-placer', {
           if (self._landingDot) self._landingDot.setAttribute('visible', 'false');
           self._playerRotLock = null;
           self._playerPosLock = null;
+          self._slowLastPos = null; // clear slow-mode delta tracking
           window._vrPlacerHeld = false;
           if (justReleased) {
             // Grid snap — round X and Z to nearest 0.5 m
@@ -979,6 +981,7 @@ AFRAME.registerComponent('vr-placer', {
           this._spinPivot.set(this.held.object3D.position.x, 0, this.held.object3D.position.z);
           this._spinOffset.set(0, 0, 0);
           this.moving = true;
+          this._slowLastPos = null; // reset slow-mode delta tracking
           this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
           this._holdOffset.set(
             this.held.object3D.position.x - this._tickOrigin.x,
@@ -1006,25 +1009,44 @@ AFRAME.registerComponent('vr-placer', {
       if (this._landingDot) this._landingDot.setAttribute('visible', 'false');
     } else {
 
-    // ── Move: laser → floor intersection ─────────────────────────────────
-    // Building tracks where the laser beam hits the floor (at building's Y height).
-    // Tilt wrist up = building slides further; tilt down = pulls closer.
+    // ── Move ──────────────────────────────────────────────────────────────
     if (this.moving) {
-      this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
-      this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
-      this._tickDir.set(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
-      var planeY = this.held.object3D.position.y;
-      if (this._tickDir.y < -0.02) {
-        var _t = (planeY - this._tickOrigin.y) / this._tickDir.y;
-        if (_t > 0.15 && _t < 28) {
-          var _nx = this._tickOrigin.x + this._tickDir.x * _t;
-          var _nz = this._tickOrigin.z + this._tickDir.z * _t;
-          this.held.object3D.position.x = _nx;
-          this.held.object3D.position.z = _nz;
-          // Landing dot follows the intersection point
-          if (this._landingDot) {
-            this._landingDot.object3D.position.set(_nx, planeY + 0.02, _nz);
-            this._landingDot.setAttribute('visible', 'true');
+      if (window._slowMoveMode) {
+        // SLOW mode: 1:1 hand position delta — controller moves building 1cm per 1cm
+        var _ctrlPos = new THREE.Vector3();
+        if (this._rightCtrlEl) this._rightCtrlEl.object3D.getWorldPosition(_ctrlPos);
+        if (this._slowLastPos) {
+          var _dx = _ctrlPos.x - this._slowLastPos.x;
+          var _dz = _ctrlPos.z - this._slowLastPos.z;
+          this.held.object3D.position.x += _dx;
+          this.held.object3D.position.z += _dz;
+        }
+        this._slowLastPos = _ctrlPos.clone();
+        // Landing dot sits at the building's feet
+        if (this._landingDot) {
+          var _bx = this.held.object3D.position.x;
+          var _bz = this.held.object3D.position.z;
+          var _by = this.held.object3D.position.y;
+          this._landingDot.object3D.position.set(_bx, _by + 0.02, _bz);
+          this._landingDot.setAttribute('visible', 'true');
+        }
+      } else {
+        // Laser → floor intersection: aim laser at floor, building follows hit point
+        this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
+        this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
+        this._tickDir.set(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
+        var planeY = this.held.object3D.position.y;
+        if (this._tickDir.y < -0.02) {
+          var _t = (planeY - this._tickOrigin.y) / this._tickDir.y;
+          if (_t > 0.15 && _t < 28) {
+            var _nx = this._tickOrigin.x + this._tickDir.x * _t;
+            var _nz = this._tickOrigin.z + this._tickDir.z * _t;
+            this.held.object3D.position.x = _nx;
+            this.held.object3D.position.z = _nz;
+            if (this._landingDot) {
+              this._landingDot.object3D.position.set(_nx, planeY + 0.02, _nz);
+              this._landingDot.setAttribute('visible', 'true');
+            }
           }
         }
       }
@@ -1624,13 +1646,14 @@ var _CP_ITEMS = [
   // Row 2 — Save, reset, spawn info
   { id:'save',    label:'SAVE',    sub:'save layout',   fn:function(p){return p&&p.doSave?p.doSave():'';} },
   { id:'reset',   label:'RESET',   sub:'clear all',     special:'reset', fn:null },
-  { id:'spawn',   label:'SPAWN',   sub:'L-trig: hold',  info:true, fn:null },
+  { id:'slow',    label:'SLOW',    sub:'1:1 hand move',  fn:function(){ window._slowMoveMode = !window._slowMoveMode; return window._slowMoveMode ? 'SLOW move  ON' : 'SLOW move  OFF'; } },
   { id:'grid',    label:'GRID',    sub:'0.5 m snap',    fn:function(){ window._gridSnap = !window._gridSnap; return window._gridSnap ? 'Grid snap  ON' : 'Grid snap  OFF'; } },
   { id:'help',    label:'HELP',    sub:'controls guide', fn:function(){ if (window._openHelpPanel) window._openHelpPanel(); return ''; } }
 ];
 
 window._controlPanelOpen = false;
 window._gridSnap         = false; // when true, building positions snap to 0.5 m grid on release
+window._slowMoveMode     = false; // when true, building moves 1:1 with hand (no laser projection)
 
 AFRAME.registerComponent('control-panel', {
   init: function () {
