@@ -252,6 +252,7 @@ AFRAME.registerComponent('vr-placer', {
     self.leftHovered    = null;
     self.leftGripping   = false;
     self.history        = [];
+    self.redoHistory    = [];
     self.originals      = {};
     self.bboxCache      = {};
     self.bboxKeys       = [];
@@ -404,6 +405,7 @@ AFRAME.registerComponent('vr-placer', {
               rotY:  self.hovered.object3D.rotation.y,
               scale: self.hovered.object3D.scale.x
             });
+            self.redoHistory = []; // new action clears redo stack
             self.held = self.hovered;
             // Spin pivot = building centre XZ — rotates around its own axis
             self._spinPivot.set(
@@ -491,6 +493,11 @@ AFRAME.registerComponent('vr-placer', {
 
         // A button — floor snap, or snap to level in tilt mode
         rightCtrl.addEventListener('abuttondown', function () {
+          // Control panel takes priority when open
+          if (window._controlPanelOpen) {
+            if (window._cpActivate) window._cpActivate();
+            return;
+          }
           if (self.held) {
             if (self._tiltMode) {
               self.held.object3D.rotation.x = 0;
@@ -556,13 +563,8 @@ AFRAME.registerComponent('vr-placer', {
         });
 
         leftCtrl.addEventListener('thumbstickdown', function () {
-          if (window._radialMenuOpen) return; // menu open — hand off to radial-menu
-          if (self.history.length === 0) return;
-          var last = self.history.pop();
-          last.el.object3D.position.x  = last.x;
-          last.el.object3D.position.z  = last.z;
-          last.el.object3D.rotation.y  = last.rotY;
-          last.el.object3D.scale.setScalar(last.scale);
+          if (window._radialMenuOpen) return;
+          self.doUndo();
         });
 
         leftCtrl.addEventListener('gripdown', function () {
@@ -628,26 +630,60 @@ AFRAME.registerComponent('vr-placer', {
         });
       }
 
-      // ── Helpers ──────────────────────────────────────────────────────────
-      function decoratePlaceable(el) {
-        var name = el.getAttribute('data-name') || '';
-        if (!name) return;
-        var lbl = document.createElement('a-text');
-        lbl.setAttribute('value', name);
-        lbl.setAttribute('position', '0 8 0');
-        lbl.setAttribute('align', 'center');
-        lbl.setAttribute('color', '#ffee88');
-        lbl.setAttribute('width', '12');
-        lbl.setAttribute('material', 'shader:flat');
-        el.appendChild(lbl);
-      }
+      // ── Exposed methods (called by control-panel component) ─────────────
+      self.doUndo = function () {
+        if (self.history.length === 0) return 'nothing to undo';
+        var last = self.history.pop();
+        // Save current state to redo stack
+        self.redoHistory.push({
+          el: last.el,
+          x: last.el.object3D.position.x,
+          z: last.el.object3D.position.z,
+          rotY: last.el.object3D.rotation.y,
+          scale: last.el.object3D.scale.x
+        });
+        last.el.object3D.position.x = last.x;
+        last.el.object3D.position.z = last.z;
+        last.el.object3D.rotation.y = last.rotY;
+        last.el.object3D.scale.setScalar(last.scale);
+        return 'UNDO';
+      };
 
-      function cloneHeld() {
-        if (!self.held) return;
+      self.doRedo = function () {
+        if (self.redoHistory.length === 0) return 'nothing to redo';
+        var last = self.redoHistory.pop();
+        self.history.push({
+          el: last.el,
+          x: last.el.object3D.position.x,
+          z: last.el.object3D.position.z,
+          rotY: last.el.object3D.rotation.y,
+          scale: last.el.object3D.scale.x
+        });
+        last.el.object3D.position.x = last.x;
+        last.el.object3D.position.z = last.z;
+        last.el.object3D.rotation.y = last.rotY;
+        last.el.object3D.scale.setScalar(last.scale);
+        return 'REDO';
+      };
+
+      self.doFloorSnap = function () {
+        var target = self.held || self.hovered;
+        if (!target) return 'no building selected';
+        if (self._tiltMode) {
+          target.object3D.rotation.x = 0;
+          target.object3D.rotation.z = 0;
+          return 'snapped to level';
+        }
+        target.object3D.position.y = 0;
+        return 'snapped to floor';
+      };
+
+      self.doClone = function () {
+        if (!self.held) return 'hold a building first';
         var srcName = self.held.getAttribute('data-name');
         self.cloneCounts[srcName] = (self.cloneCounts[srcName] || 0) + 1;
         var newName = srcName + '-' + self.cloneCounts[srcName];
-        var clone = document.createElement('a-entity');
+        var clone   = document.createElement('a-entity');
         clone.setAttribute('class', 'placeable');
         clone.setAttribute('night-aware', '');
         clone.setAttribute('data-name', newName);
@@ -662,8 +698,58 @@ AFRAME.registerComponent('vr-placer', {
         decoratePlaceable(clone);
         self.el.sceneEl.appendChild(clone);
         self.history.push({ el: clone, x: p.x + 4, y: p.y, z: p.z, rotY: 0, scale: sc });
+        self.redoHistory = [];
         self.held = clone;
+        return 'cloned ' + srcName;
+      };
+
+      self.doSave = function () {
+        try {
+          var layout = {};
+          document.querySelectorAll('.placeable').forEach(function (el) {
+            var id3 = el.getAttribute('data-name');
+            var p3  = el.object3D.position;
+            layout[id3] = { x: p3.x, y: p3.y, z: p3.z, rotY: el.object3D.rotation.y, scale: el.object3D.scale.x };
+          });
+          localStorage.setItem('blitz-layout', JSON.stringify(layout));
+        } catch (e) {}
+        return 'layout saved';
+      };
+
+      self.doLockToggle = function () {
+        var target = self.held || self.hovered;
+        if (!target) return 'no building selected';
+        var id = target.getAttribute('data-name');
+        if (self._lockedBuildings[id]) {
+          delete self._lockedBuildings[id];
+          target.object3D.traverse(function (o) {
+            if (o.isMesh && o.material) { o.material.opacity = 1; o.material.transparent = false; }
+          });
+          return id + ': UNLOCKED';
+        } else {
+          self._lockedBuildings[id] = true;
+          target.object3D.traverse(function (o) {
+            if (o.isMesh && o.material) { o.material.transparent = true; o.material.opacity = 0.5; }
+          });
+          return id + ': LOCKED';
+        }
+      };
+
+      // ── Helpers ──────────────────────────────────────────────────────────
+      function decoratePlaceable(el) {
+        var name = el.getAttribute('data-name') || '';
+        if (!name) return;
+        var lbl = document.createElement('a-text');
+        lbl.setAttribute('value', name);
+        lbl.setAttribute('position', '0 8 0');
+        lbl.setAttribute('align', 'center');
+        lbl.setAttribute('color', '#ffee88');
+        lbl.setAttribute('width', '12');
+        lbl.setAttribute('material', 'shader:flat');
+        el.appendChild(lbl);
       }
+
+      function cloneHeld() { self.doClone(); }
 
       document.querySelectorAll('.placeable').forEach(function (el) {
         decoratePlaceable(el);
@@ -1285,78 +1371,146 @@ AFRAME.registerComponent('radial-menu', {
 });
 
 
-// ── TOOL MENU ─────────────────────────────────────────────────────────────────
-// Right thumbstick HOLD (when not holding a building) → 3-card panel opens
-// Left stick ← / →  → move highlight between tools
-// Release right thumbstick → activate highlighted tool & close
+// ── CONTROL PANEL ─────────────────────────────────────────────────────────────
+// B button (right) → open / close 5 × 3 grid of all controls
+// Right stick      → navigate grid (row/col)
+// A button         → activate highlighted cell
 //
-var _TOOLS = [
-  {
-    id: 0,
-    name: 'NORMAL',
-    sub: 'Spin & Scale',
-    desc: 'R-stick left/right: rotate\nR-stick up/down: scale\nDefault mode for placing buildings.'
-  },
-  {
-    id: 1,
-    name: 'TILT',
-    sub: 'Lean X / Z',
-    desc: 'R-stick: tilt the building\nforward/back and side to side.\nGood for rubble or leaning walls.'
-  },
-  {
-    id: 2,
-    name: 'HEIGHT',
-    sub: 'Raise & Lower',
-    desc: 'R-stick up/down: lift or\nsink the building vertically.\nUse to float or embed objects.'
-  }
+// Items: 5 columns × 3 rows = 15 slots.  null = empty cell.
+// isMode: which _toolMode value this cell represents (for active highlight)
+// special: 'reset' = two-step confirmation.  info: true = display-only tile.
+var _CP_ITEMS = [
+  // Row 0 — Tool modes + undo/redo
+  { id:'normal',  label:'NORMAL',  sub:'spin + scale',  isMode:0, fn:function(p){if(p)p._toolMode=0; return 'NORMAL mode';} },
+  { id:'tilt',    label:'TILT',    sub:'lean X / Z',    isMode:1, fn:function(p){if(p)p._toolMode=1; return 'TILT mode';} },
+  { id:'height',  label:'HEIGHT',  sub:'raise / lower', isMode:2, fn:function(p){if(p)p._toolMode=2; return 'HEIGHT mode';} },
+  { id:'undo',    label:'UNDO',    sub:'last action',   fn:function(p){return p&&p.doUndo?p.doUndo():'';} },
+  { id:'redo',    label:'REDO',    sub:'redo action',   fn:function(p){return p&&p.doRedo?p.doRedo():'';} },
+  // Row 1 — Build actions + scene
+  { id:'clone',   label:'CLONE',   sub:'copy held',     fn:function(p){return p&&p.doClone?p.doClone():'';} },
+  { id:'snap',    label:'FLOOR',   sub:'snap to floor', fn:function(p){return p&&p.doFloorSnap?p.doFloorSnap():'';} },
+  { id:'lock',    label:'LOCK',    sub:'toggle lock',   fn:function(p){return p&&p.doLockToggle?p.doLockToggle():'';} },
+  { id:'night',   label:'DAY/NGT', sub:'toggle sky',    fn:function(){if(window.toggleNight)window.toggleNight(); return 'day / night';} },
+  { id:'visitor', label:'VISITOR', sub:'walk / build',  fn:function(){if(window.toggleVisitorMode)window.toggleVisitorMode(); return 'visitor mode';} },
+  // Row 2 — Save, reset, spawn info
+  { id:'save',    label:'SAVE',    sub:'save layout',   fn:function(p){return p&&p.doSave?p.doSave():'';} },
+  { id:'reset',   label:'RESET',   sub:'clear all',     special:'reset', fn:null },
+  { id:'spawn',   label:'SPAWN',   sub:'L-trig: hold',  info:true, fn:null },
+  null,
+  null
 ];
 
-AFRAME.registerComponent('tool-menu', {
+window._controlPanelOpen = false;
+
+AFRAME.registerComponent('control-panel', {
   init: function () {
     var self = this;
-    self._highlighted  = 0;
-    self._panelEl      = null;
-    self._cardEls      = [];
-    self._descEl       = null;
-    self._dismissTimer = -1;
+    self._open          = false;
+    self._col           = 0;
+    self._row           = 0;
+    self._panelEl       = null;
+    self._cellEls       = [];  // 15 cells, row-major
+    self._descEl        = null;
+    self._navLocked     = false;
+    self._resetPending  = false;
+    self._rightCtrlEl   = null;
 
     this.el.sceneEl.addEventListener('loaded', function () {
       self._buildPanel();
       self._bindControls();
+      window._cpActivate = function () { self._activate(); };
+      window._cpClose    = function () { self._close(); };
     });
   },
 
   _bindControls: function () {
     var self = this;
     var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
-    if (!rightCtrl) {
-      setTimeout(function () { self._bindControls(); }, 500);
-      return;
-    }
+    if (!rightCtrl) { setTimeout(function () { self._bindControls(); }, 500); return; }
+    self._rightCtrlEl = rightCtrl;
 
-    // Right stick click while NOT holding → cycle tool mode and show panel briefly
-    rightCtrl.addEventListener('thumbstickdown', function () {
-      var placer = self.el.sceneEl.components['vr-placer'];
-      if (window._radialMenuOpen)  return;
-      if (placer && placer.held)   return; // holding — let vr-placer cycle mode instead
-
-      var cur  = placer ? placer._toolMode : 0;
-      var next = (cur + 1) % 3;
-      if (placer) placer._toolMode = next;
-      self._highlighted  = next;
-      self._dismissTimer = 120; // show for ~2 s then auto-dismiss
-      self._refresh();
-      if (self._panelEl) self._panelEl.setAttribute('visible', 'true');
+    rightCtrl.addEventListener('bbuttondown', function () {
+      if (self._open) { self._close(); } else { self._openPanel(); }
     });
   },
 
+  _openPanel: function () {
+    this._open = true;
+    window._controlPanelOpen = true;
+    this._col = 0; this._row = 0;
+    this._navLocked    = true;   // wait for stick to re-centre before first move
+    this._resetPending = false;
+    this._refresh();
+    if (this._panelEl) this._panelEl.setAttribute('visible', 'true');
+  },
+
+  _close: function () {
+    this._open = false;
+    window._controlPanelOpen = false;
+    this._resetPending = false;
+    if (this._panelEl) this._panelEl.setAttribute('visible', 'false');
+  },
+
+  _activate: function () {
+    var idx  = this._row * 5 + this._col;
+    var item = _CP_ITEMS[idx];
+    if (!item || item.info) return;   // empty or display-only
+
+    // RESET: two-step confirmation
+    if (item.special === 'reset') {
+      if (!this._resetPending) {
+        this._resetPending = true;
+        this._refresh();   // description updates to show confirm prompt
+      } else {
+        if (window._doReset) window._doReset();
+        this._close();
+      }
+      return;
+    }
+
+    if (item.fn) {
+      var placer = this.el.sceneEl.components['vr-placer'];
+      var msg = item.fn(placer);
+      if (msg && placer && placer.readout) {
+        placer.readout.setAttribute('text', 'value', msg);
+        placer.readout.setAttribute('visible', 'true');
+        placer.readoutTimer = 90;
+      }
+    }
+    this._close();
+  },
+
   tick: function () {
-    if (this._dismissTimer < 0) return;
-    if (this._dismissTimer > 0) {
-      this._dismissTimer--;
+    if (!this._open || !this._rightCtrlEl) return;
+
+    var tc = this._rightCtrlEl.components['tracked-controls-webxr'] ||
+             this._rightCtrlEl.components['tracked-controls'];
+    var gp = tc && tc.controller && tc.controller.gamepad;
+    if (!gp || gp.axes.length < 4) return;
+
+    var sx = gp.axes[2];
+    var sy = gp.axes[3];
+
+    // Require stick to return to centre before accepting a new move
+    if (Math.abs(sx) < 0.3 && Math.abs(sy) < 0.3) {
+      this._navLocked = false;
+      return;
+    }
+    if (this._navLocked) return;
+
+    // Move on the dominant axis
+    var moved = false;
+    if (Math.abs(sx) >= Math.abs(sy)) {
+      if (sx >  0.5) { this._col = Math.min(4, this._col + 1); moved = true; }
+      else if (sx < -0.5) { this._col = Math.max(0, this._col - 1); moved = true; }
     } else {
-      if (this._panelEl) this._panelEl.setAttribute('visible', 'false');
-      this._dismissTimer = -1;
+      if (sy >  0.5) { this._row = Math.min(2, this._row + 1); moved = true; }
+      else if (sy < -0.5) { this._row = Math.max(0, this._row - 1); moved = true; }
+    }
+    if (moved) {
+      this._navLocked    = true;
+      this._resetPending = false; // cancel pending reset if cursor moved away
+      this._refresh();
     }
   },
 
@@ -1365,132 +1519,149 @@ AFRAME.registerComponent('tool-menu', {
     if (!cam) return;
 
     var panel = document.createElement('a-entity');
-    panel.setAttribute('position', '0 0.06 -0.55');
+    panel.setAttribute('position', '0 0.04 -0.60');
     panel.setAttribute('visible', 'false');
     cam.appendChild(panel);
     this._panelEl = panel;
 
-    // Header
-    var header = document.createElement('a-text');
-    header.setAttribute('value', 'SELECT TOOL');
-    header.setAttribute('align', 'center');
-    header.setAttribute('color', '#aabbcc');
-    header.setAttribute('width', '0.55');
-    header.setAttribute('position', '0 0.145 0.002');
-    header.setAttribute('material', 'shader:flat');
-    panel.appendChild(header);
+    // Panel backing
+    var bg = document.createElement('a-plane');
+    bg.setAttribute('width',  '0.75');
+    bg.setAttribute('height', '0.50');
+    bg.setAttribute('position', '0 -0.025 -0.001');
+    bg.setAttribute('material', 'color:#070c16; opacity:0.96; transparent:true; shader:flat; side:double');
+    panel.appendChild(bg);
 
-    // Cards
-    var CARD_W = 0.20, CARD_H = 0.17, GAP = 0.025;
-    var startX  = -(CARD_W + GAP);   // 3 cards centred: -1, 0, +1
+    // Title
+    var title = document.createElement('a-text');
+    title.setAttribute('value', '— CONTROL PANEL —');
+    title.setAttribute('align', 'center');
+    title.setAttribute('color', '#8899bb');
+    title.setAttribute('width', '0.73');
+    title.setAttribute('position', '0 0.215 0.001');
+    title.setAttribute('material', 'shader:flat');
+    panel.appendChild(title);
 
-    for (var i = 0; i < 3; i++) {
-      var cx   = startX + i * (CARD_W + GAP);
-      var card = document.createElement('a-entity');
-      card.setAttribute('position', cx + ' 0 0');
-      panel.appendChild(card);
-      this._cardEls.push(card);
+    // Grid — 5 cols × 3 rows
+    var CW = 0.130, CH = 0.100, GAP = 0.009;
+    var totalW = 5 * CW + 4 * GAP;
+    var sx0 = -totalW / 2 + CW / 2;
+    var sy0 = 0.148;
 
-      // Background
-      var bg = document.createElement('a-plane');
-      bg.setAttribute('width', CARD_W);
-      bg.setAttribute('height', CARD_H);
-      bg.setAttribute('material', 'color:#1a2030; opacity:0.92; transparent:true; shader:flat; side:double');
-      card.appendChild(bg);
-      card._bg = bg;
+    for (var r = 0; r < 3; r++) {
+      for (var c = 0; c < 5; c++) {
+        var idx  = r * 5 + c;
+        var item = _CP_ITEMS[idx];
+        var cx   = sx0 + c * (CW + GAP);
+        var cy   = sy0 - r * (CH + GAP);
 
-      // Tool name (big)
-      var nameEl = document.createElement('a-text');
-      nameEl.setAttribute('value', _TOOLS[i].name);
-      nameEl.setAttribute('align', 'center');
-      nameEl.setAttribute('baseline', 'center');
-      nameEl.setAttribute('color', '#aabbcc');
-      nameEl.setAttribute('width', '0.34');
-      nameEl.setAttribute('position', '0 0.042 0.003');
-      nameEl.setAttribute('material', 'shader:flat');
-      card.appendChild(nameEl);
-      card._nameEl = nameEl;
+        var cell = document.createElement('a-entity');
+        cell.setAttribute('position', cx + ' ' + cy + ' 0');
+        panel.appendChild(cell);
+        this._cellEls.push(cell);
 
-      // Sub label (small)
-      var subEl = document.createElement('a-text');
-      subEl.setAttribute('value', _TOOLS[i].sub);
-      subEl.setAttribute('align', 'center');
-      subEl.setAttribute('baseline', 'center');
-      subEl.setAttribute('color', '#445566');
-      subEl.setAttribute('width', '0.25');
-      subEl.setAttribute('position', '0 0.008 0.003');
-      subEl.setAttribute('material', 'shader:flat');
-      card.appendChild(subEl);
-      card._subEl = subEl;
+        var cbg = document.createElement('a-plane');
+        cbg.setAttribute('width',  CW);
+        cbg.setAttribute('height', CH);
+        cbg.setAttribute('material', 'color:#111827; opacity:' + (item ? '0.92' : '0.25') + '; transparent:true; shader:flat; side:double');
+        cell.appendChild(cbg);
+        cell._bg = cbg;
 
-      // Active dot (shows which tool is currently live)
-      var dot = document.createElement('a-circle');
-      dot.setAttribute('radius', '0.007');
-      dot.setAttribute('position', '0 -0.055 0.003');
-      dot.setAttribute('material', 'color:#4466aa; shader:flat; side:double');
-      dot.setAttribute('visible', 'false');
-      card.appendChild(dot);
-      card._dot = dot;
+        if (item) {
+          var nameEl = document.createElement('a-text');
+          nameEl.setAttribute('value', item.label);
+          nameEl.setAttribute('align', 'center');
+          nameEl.setAttribute('baseline', 'center');
+          nameEl.setAttribute('color', item.info ? '#445566' : '#99aabb');
+          nameEl.setAttribute('width', '0.22');
+          nameEl.setAttribute('position', '0 0.022 0.002');
+          nameEl.setAttribute('material', 'shader:flat');
+          cell.appendChild(nameEl);
+          cell._nameEl = nameEl;
+
+          var subEl = document.createElement('a-text');
+          subEl.setAttribute('value', item.sub || '');
+          subEl.setAttribute('align', 'center');
+          subEl.setAttribute('baseline', 'center');
+          subEl.setAttribute('color', '#2a3d52');
+          subEl.setAttribute('width', '0.19');
+          subEl.setAttribute('position', '0 -0.021 0.002');
+          subEl.setAttribute('material', 'shader:flat');
+          cell.appendChild(subEl);
+          cell._subEl = subEl;
+        }
+      }
     }
 
-    // Description box below the cards
-    var descBg = document.createElement('a-plane');
-    descBg.setAttribute('width', '0.68');
-    descBg.setAttribute('height', '0.09');
-    descBg.setAttribute('position', '0 -0.145 0');
-    descBg.setAttribute('material', 'color:#0d1020; opacity:0.90; transparent:true; shader:flat; side:double');
-    panel.appendChild(descBg);
+    // Description strip at bottom
+    var dBg = document.createElement('a-plane');
+    dBg.setAttribute('width', '0.73');
+    dBg.setAttribute('height', '0.055');
+    dBg.setAttribute('position', '0 -0.226 -0.001');
+    dBg.setAttribute('material', 'color:#040810; opacity:0.97; transparent:true; shader:flat; side:double');
+    panel.appendChild(dBg);
 
     var descEl = document.createElement('a-text');
-    descEl.setAttribute('value', '');
+    descEl.setAttribute('value', 'R-stick: navigate   A: activate   B: close');
     descEl.setAttribute('align', 'center');
     descEl.setAttribute('baseline', 'center');
-    descEl.setAttribute('color', '#88aacc');
-    descEl.setAttribute('width', '0.64');
-    descEl.setAttribute('wrap-count', '42');
-    descEl.setAttribute('position', '0 -0.145 0.003');
+    descEl.setAttribute('color', '#334455');
+    descEl.setAttribute('width', '0.70');
+    descEl.setAttribute('position', '0 -0.226 0.001');
     descEl.setAttribute('material', 'shader:flat');
     panel.appendChild(descEl);
     this._descEl = descEl;
-
-    // Hint line
-    var hint = document.createElement('a-text');
-    hint.setAttribute('value', 'R-stick click to cycle  —  auto-dismisses');
-    hint.setAttribute('align', 'center');
-    hint.setAttribute('color', '#334455');
-    hint.setAttribute('width', '0.62');
-    hint.setAttribute('position', '0 -0.215 0.003');
-    hint.setAttribute('material', 'shader:flat');
-    panel.appendChild(hint);
   },
 
   _refresh: function () {
-    var placer = this.el.sceneEl.components['vr-placer'];
-    var active = placer ? placer._toolMode : -1;
+    var placer     = this.el.sceneEl.components['vr-placer'];
+    var activeMode = placer ? placer._toolMode : 0;
+    var selIdx     = this._row * 5 + this._col;
 
-    for (var i = 0; i < 3; i++) {
-      var card = this._cardEls[i];
-      if (!card) continue;
-      var isHL  = (i === this._highlighted);
-      var isAct = (i === active);
+    for (var i = 0; i < 15; i++) {
+      var cell = this._cellEls[i];
+      if (!cell || !cell._bg) continue;
+      var item   = _CP_ITEMS[i];
+      var isSel  = (i === selIdx);
+      var isMode = item && (item.isMode !== undefined) && (item.isMode === activeMode);
 
-      if (card._bg) {
-        card._bg.setAttribute('material',
-          'color:' + (isHL ? '#2244aa' : '#1a2030') +
-          '; opacity:' + (isHL ? '0.97' : '0.92') +
-          '; transparent:true; shader:flat; side:double');
+      var bgColor = isSel   ? '#1a3c70'
+                  : isMode  ? '#0a2818'
+                  : item    ? '#111827'
+                  : '#060c16';
+      var opac    = item ? '0.95' : '0.20';
+      cell._bg.setAttribute('material',
+        'color:' + bgColor + '; opacity:' + opac + '; transparent:true; shader:flat; side:double');
+
+      if (cell._nameEl) {
+        var nc = isSel  ? '#ffffff'
+               : isMode ? '#44ff88'
+               : item && item.info ? '#3a5066'
+               : item && item.special === 'reset' && this._resetPending ? '#ff6666'
+               : '#99aabb';
+        cell._nameEl.setAttribute('text', 'color', nc);
       }
-      if (card._nameEl) card._nameEl.setAttribute('text', 'color', isHL ? '#ffffff' : '#556677');
-      if (card._subEl)  card._subEl.setAttribute('text',  'color', isHL ? '#88aaff' : '#334455');
-      if (card._dot) {
-        card._dot.setAttribute('visible', isAct ? 'true' : 'false');
-        if (isAct) card._dot.setAttribute('material',
-          'color:' + (isHL ? '#ffffff' : '#4466aa') + '; shader:flat; side:double');
+      if (cell._subEl) {
+        cell._subEl.setAttribute('text', 'color', isSel ? '#6688cc' : '#2a3d52');
       }
     }
 
+    // Description text for selected cell
     if (this._descEl) {
-      this._descEl.setAttribute('text', 'value', _TOOLS[this._highlighted].desc);
+      var si = _CP_ITEMS[selIdx];
+      var desc;
+      if (!si) {
+        desc = 'R-stick: navigate   A: activate   B: close';
+      } else if (si.info) {
+        desc = 'SPAWN:  hold Left Trigger  —  stick to pick item  —  release to place';
+      } else if (si.special === 'reset') {
+        desc = this._resetPending
+          ? 'CONFIRM?  press A again to clear all buildings — cannot be undone'
+          : 'RESET MAP: removes all placed buildings (will ask to confirm)';
+      } else {
+        desc = si.label + ':  ' + (si.sub || '') + '   —   R-stick navigate  A activate  B close';
+      }
+      this._descEl.setAttribute('text', 'value', desc);
     }
   }
 });

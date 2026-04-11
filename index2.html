@@ -117,6 +117,7 @@
         try { localStorage.removeItem('blitz-layout'); } catch(e) {}
         cancelReset();
       }
+      window._doReset = doReset; // expose for control-panel
 
       if (resetBtn) {
         resetBtn.addEventListener('click', function () {
@@ -155,7 +156,7 @@
   boundary-collider
   vr-placer
   radial-menu
-  tool-menu
+  control-panel
   fog="type: linear; color: #b0c8e8; near: 60; far: 120"
   renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
   shadow="type: basic"
@@ -282,22 +283,22 @@
 RIGHT HAND
 Grip: laser / select
 + Trigger: drag building
-R-Stick L/R: spin
-R-Stick U/D: scale
+R-Stick: spin / scale
 Stick click: cycle tool
-A: floor snap
-A x2: lock / unlock
+A: floor snap / confirm
+B: CONTROL PANEL
 
-TOOL MODES (cycle)
-NORMAL: spin + scale
-TILT:   lean X / Z
-HEIGHT: raise / lower
+CONTROL PANEL (B)
+All tools in one place
+R-stick: navigate
+A: activate   B: close
+UNDO, REDO, CLONE,
+TILT, HEIGHT + more
 
 LEFT HAND
 Stick: walk
-Trigger hold: spawn menu
-  Stick: pick building
-  Release: spawn
+Trigger hold: spawn
+  Stick: pick + release
   Stick click: next page
 Grip + Stick: set height
 Stick click: undo
