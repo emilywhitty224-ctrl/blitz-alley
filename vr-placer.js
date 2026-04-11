@@ -283,6 +283,7 @@ AFRAME.registerComponent('vr-placer', {
     self._nudgeX      = false;
     self._nudgeZ      = false;
     self._tiltMode    = false;
+    self._toolMode    = 0; // 0=normal 1=tilt 2=height (right stick Y)
 
     this.el.sceneEl.addEventListener('loaded', function () {
       var cam       = document.querySelector('#cam');
@@ -400,31 +401,33 @@ AFRAME.registerComponent('vr-placer', {
               scale: self.hovered.object3D.scale.x
             });
             self.held = self.hovered;
-            // Spin pivot: where laser ray hits Y=0
+            // Spin pivot = building centre XZ — rotates around its own axis
+            self._spinPivot.set(
+              self.held.object3D.position.x, 0,
+              self.held.object3D.position.z
+            );
+            self._spinOffset.set(0, 0, 0);
+            // Immediately start dragging — no trigger press needed
+            self.moving = true;
             laserPivot.object3D.getWorldPosition(self._tickOrigin);
-            laserPivot.object3D.getWorldQuaternion(self.tmpQuat);
-            self._tickDir.set(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
-            var tGrip = (self._tickDir.y !== 0) ? -self._tickOrigin.y / self._tickDir.y : 5;
-            if (tGrip < 0.5) tGrip = 5;
-            self._spinPivot.copy(self._tickOrigin).addScaledVector(self._tickDir, tGrip);
-            self._spinPivot.y = 0;
-            self._spinOffset.set(
-              self.held.object3D.position.x - self._spinPivot.x,
+            self._holdOffset.set(
+              self.held.object3D.position.x - self._tickOrigin.x,
               0,
-              self.held.object3D.position.z - self._spinPivot.z
+              self.held.object3D.position.z - self._tickOrigin.z
             );
           }
         });
 
         rightCtrl.addEventListener('gripup', function () {
           var justReleased = self.held;
-          self.gripping = false;
-          self.moving   = false;
-          self.held     = null;
-          self.hovered  = null;
-          self.stickX   = 0;
-          self.heightY  = 0;
-          self.scaleY   = 0;
+          self.gripping  = false;
+          self.moving    = false;
+          self.held      = null;
+          self.hovered   = null;
+          self.stickX    = 0;
+          self.heightY   = 0;
+          self.scaleY    = 0;
+          self._toolMode = 0;
           laserPivot.setAttribute('visible', 'false');
           self._playerRotLock = null;
           self._playerPosLock = null;
@@ -451,6 +454,7 @@ AFRAME.registerComponent('vr-placer', {
 
         rightCtrl.addEventListener('triggerdown', function () {
           if (self.gripping && self.held) {
+            // Re-lock hold offset from current position (fine-tune grab point)
             self.moving = true;
             laserPivot.object3D.getWorldPosition(self._tickOrigin);
             self._holdOffset.set(
@@ -458,13 +462,15 @@ AFRAME.registerComponent('vr-placer', {
               0,
               self.held.object3D.position.z - self._tickOrigin.z
             );
-          } else if (!self.gripping && self._btnPts) {
-            laserPivot.object3D.getWorldPosition(self._tickOrigin);
-            laserPivot.object3D.getWorldQuaternion(self.tmpQuat);
+          }
+          if (self._btnPts) {
+            // Button ray: controller forward direction (NOT the 45°-down laser)
+            rightCtrl.object3D.getWorldPosition(self._tickOrigin);
+            rightCtrl.object3D.getWorldQuaternion(self.tmpQuat);
             self._tickDir.set(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
             for (var bi = 0; bi < self._btnPts.length; bi++) {
               var toBtn = new THREE.Vector3().subVectors(self._btnPts[bi].pos, self._tickOrigin).normalize();
-              if (toBtn.dot(self._tickDir) > 0.96) {
+              if (toBtn.dot(self._tickDir) > 0.92) { // ~23° cone — generous for world buttons
                 self._btnPts[bi].fn();
                 break;
               }
@@ -472,7 +478,7 @@ AFRAME.registerComponent('vr-placer', {
           }
         });
         rightCtrl.addEventListener('triggerup', function () {
-          self.moving = false;
+          // Keep moving = true after triggerup (drag continues from grip)
         });
 
         rightCtrl.addEventListener('thumbstickmoved', function (e) {
@@ -523,9 +529,20 @@ AFRAME.registerComponent('vr-placer', {
           self._aLastTap = now;
         });
 
-        // Thumbstick click — clone held building
+        // Right stick click while holding — cycle tool mode
+        // Normal → Tilt → Height → Normal
         rightCtrl.addEventListener('thumbstickdown', function () {
-          cloneHeld();
+          if (self.held) {
+            self._toolMode = (self._toolMode + 1) % 3;
+            var modeNames = ['NORMAL  (spin + scale)', 'TILT  (lean X / Z)', 'HEIGHT  (raise / lower)'];
+            if (self.readout) {
+              self.readout.setAttribute('text', 'value', modeNames[self._toolMode]);
+              self.readout.setAttribute('visible', 'true');
+              self.readoutTimer = 150;
+            }
+          } else {
+            cloneHeld();
+          }
         });
       }
 
@@ -769,10 +786,14 @@ AFRAME.registerComponent('vr-placer', {
       }
     }
 
-    // ── Tilt mode: both grips → right stick tilts the building ───────────
-    this._tiltMode = this.gripping && this.leftGripping;
+    // ── Tool modes — cycled with right stick click while holding ─────────
+    // Mode 0 Normal: right stick X = spin, Y = scale
+    // Mode 1 Tilt:   right stick X = lean Z, Y = lean X (A to snap level)
+    // Mode 2 Height: right stick Y = raise/lower
+    this._tiltMode = (this._toolMode === 1);
 
-    if (this._tiltMode) {
+    if (this._toolMode === 1) {
+      // ── TILT MODE ────────────────────────────────────────────────────────
       if (Math.abs(this.stickX) > 0.15)
         this.held.object3D.rotation.z += this.stickX * 0.018;
       if (Math.abs(this.scaleY) > 0.15)
@@ -786,36 +807,46 @@ AFRAME.registerComponent('vr-placer', {
         this.readout.setAttribute('visible', 'true');
         this.readoutTimer = 6;
       }
-    } else {
-      // ── Spin — right stick X, pivoting around laser aim point ──────────
+    } else if (this._toolMode === 2) {
+      // ── HEIGHT MODE ──────────────────────────────────────────────────────
+      if (Math.abs(this.scaleY) > 0.15) {
+        this.held.object3D.position.y -= this.scaleY * 0.007;
+        if (this.readout && this.frameCount % 6 === 0) {
+          var hy  = this.held.object3D.position.y.toFixed(2);
+          var hlb = parseFloat(hy) >= 0 ? '+' + hy : hy;
+          this.readout.setAttribute('text', 'value', 'height  ' + hlb + ' m');
+          this.readout.setAttribute('visible', 'true');
+          this.readoutTimer = 60;
+        }
+      }
+      // Spin still works in height mode
       if (Math.abs(this.stickX) > 0.15) {
-        var dA  = this.stickX * 0.02;
-        this.held.object3D.rotation.y += dA;
-        var cos = Math.cos(dA), sin = Math.sin(dA);
-        var ox  = this._spinOffset.x, oz = this._spinOffset.z;
-        this._spinOffset.x = ox * cos - oz * sin;
-        this._spinOffset.z = ox * sin + oz * cos;
-        this.held.object3D.position.x = this._spinPivot.x + this._spinOffset.x;
-        this.held.object3D.position.z = this._spinPivot.z + this._spinOffset.z;
+        this.held.object3D.rotation.y += this.stickX * 0.02;
+      }
+    } else {
+      // ── NORMAL MODE ──────────────────────────────────────────────────────
+      // Spin — right stick X around building centre
+      if (Math.abs(this.stickX) > 0.15) {
+        this.held.object3D.rotation.y += this.stickX * 0.02;
+        // Keep spinPivot in sync with building (centre-pivot, offset always 0)
+        this._spinPivot.set(
+          this.held.object3D.position.x, 0,
+          this.held.object3D.position.z
+        );
       }
 
-      // ── Scale — right stick Y ───────────────────────────────────────────
+      // Scale — right stick Y
       var adjusting = false;
       if (Math.abs(this.scaleY) > 0.15) {
         var oldSc  = this.held.object3D.scale.x;
         var ns     = Math.max(0.02, oldSc + this.scaleY * 0.002);
-        var factor = ns / oldSc;
-        this.held.object3D.position.x = this._spinPivot.x + (this.held.object3D.position.x - this._spinPivot.x) * factor;
-        this.held.object3D.position.z = this._spinPivot.z + (this.held.object3D.position.z - this._spinPivot.z) * factor;
         this.held.object3D.scale.setScalar(ns);
-        this._spinOffset.x = this.held.object3D.position.x - this._spinPivot.x;
-        this._spinOffset.z = this.held.object3D.position.z - this._spinPivot.z;
         adjusting = true;
       }
     }
 
-    // ── Nudge — left stick, only when not trigger-moving and not left-gripping
-    if (!this.moving && !this.leftGripping) {
+    // ── Nudge — left stick, only when not left-gripping
+    if (!this.leftGripping) {
       var NUDGE = 0.1;
       var nxOn = Math.abs(leftNudgeX) > 0.5;
       var nzOn = Math.abs(leftNudgeZ) > 0.5;
@@ -1038,6 +1069,26 @@ AFRAME.registerComponent('radial-menu', {
     wheel.appendChild(nameLabel);
     this._nameLabel = nameLabel;
 
+    // Description label below the wheel (shown when a segment is highlighted)
+    var descBg = document.createElement('a-plane');
+    descBg.setAttribute('width', '0.52');
+    descBg.setAttribute('height', '0.10');
+    descBg.setAttribute('position', '0 -0.32 0');
+    descBg.setAttribute('material', 'color:#0d1020; opacity:0.85; transparent:true; shader:flat; side:double');
+    wheel.appendChild(descBg);
+
+    var descLabel = document.createElement('a-text');
+    descLabel.setAttribute('position', '0 -0.32 0.002');
+    descLabel.setAttribute('align', 'center');
+    descLabel.setAttribute('baseline', 'center');
+    descLabel.setAttribute('color', '#88aacc');
+    descLabel.setAttribute('width', '0.50');
+    descLabel.setAttribute('wrap-count', '32');
+    descLabel.setAttribute('value', '');
+    descLabel.setAttribute('material', 'shader:flat');
+    wheel.appendChild(descLabel);
+    this._descLabel = descLabel;
+
     this._refreshLabels();
   },
 
@@ -1167,10 +1218,259 @@ AFRAME.registerComponent('radial-menu', {
       }
     }
 
-    // Name label above wheel
-    if (this._nameLabel) {
+    // Name label above wheel + description below
+    if (this._nameLabel || this._descLabel) {
       var item = newHighlight >= 0 ? items[this._page * 8 + newHighlight] : null;
-      this._nameLabel.setAttribute('text', 'value', item ? item.name : '');
+      if (this._nameLabel) this._nameLabel.setAttribute('text', 'value', item ? item.name : '');
+      if (this._descLabel) this._descLabel.setAttribute('text', 'value', item ? (item.desc || '') : '');
+    }
+  }
+});
+
+
+// ── TOOL MENU ─────────────────────────────────────────────────────────────────
+// Right thumbstick HOLD (when not holding a building) → 3-card panel opens
+// Left stick ← / →  → move highlight between tools
+// Release right thumbstick → activate highlighted tool & close
+//
+var _TOOLS = [
+  {
+    id: 0,
+    name: 'NORMAL',
+    sub: 'Spin & Scale',
+    desc: 'R-stick left/right: rotate\nR-stick up/down: scale\nDefault mode for placing buildings.'
+  },
+  {
+    id: 1,
+    name: 'TILT',
+    sub: 'Lean X / Z',
+    desc: 'R-stick: tilt the building\nforward/back and side to side.\nGood for rubble or leaning walls.'
+  },
+  {
+    id: 2,
+    name: 'HEIGHT',
+    sub: 'Raise & Lower',
+    desc: 'R-stick up/down: lift or\nsink the building vertically.\nUse to float or embed objects.'
+  }
+];
+
+window._toolMenuOpen = false;
+
+AFRAME.registerComponent('tool-menu', {
+  init: function () {
+    var self = this;
+    self._open        = false;
+    self._highlighted = 0;
+    self._panelEl     = null;
+    self._cardEls     = [];
+    self._descEl      = null;
+    self._leftCtrlEl  = null;
+    self._stickLocked = false;
+
+    this.el.sceneEl.addEventListener('loaded', function () {
+      self._buildPanel();
+      self._bindControls();
+    });
+  },
+
+  _bindControls: function () {
+    var self = this;
+
+    var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+    var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
+
+    if (!rightCtrl) {
+      setTimeout(function () { self._bindControls(); }, 500);
+      return;
+    }
+
+    self._leftCtrlEl = leftCtrl;
+
+    // Right thumbstick press → open tool menu (only when not holding a building)
+    rightCtrl.addEventListener('thumbstickdown', function () {
+      var placer = self.el.sceneEl.components['vr-placer'];
+      if (placer && placer.held) return;       // holding a building — let vr-placer handle it
+      if (window._radialMenuOpen)   return;    // building wheel is open
+      if (self._open)               return;
+
+      self._open        = true;
+      window._toolMenuOpen = true;
+      var active = placer ? placer._toolMode : 0;
+      self._highlighted = active;
+      self._refresh();
+      if (self._panelEl) self._panelEl.setAttribute('visible', 'true');
+    });
+
+    // Release → apply selection & close
+    rightCtrl.addEventListener('thumbstickup', function () {
+      if (!self._open) return;
+      var placer = self.el.sceneEl.components['vr-placer'];
+      if (placer) {
+        placer._toolMode = self._highlighted;
+        // Flash the readout with the new mode name
+        var modeNames = ['NORMAL  (spin + scale)', 'TILT  (lean X / Z)', 'HEIGHT  (raise / lower)'];
+        if (placer.readout) {
+          placer.readout.setAttribute('text', 'value', modeNames[self._highlighted]);
+          placer.readout.setAttribute('visible', 'true');
+          placer.readoutTimer = 180;
+        }
+      }
+      self._open = false;
+      window._toolMenuOpen = false;
+      if (self._panelEl) self._panelEl.setAttribute('visible', 'false');
+    });
+
+    // Left stick ← / → to move highlight while menu is open
+    if (leftCtrl) {
+      leftCtrl.addEventListener('thumbstickmoved', function (e) {
+        if (!self._open) return;
+        var sx = e.detail.x;
+        if (sx < -0.5 && !self._stickLocked) {
+          self._stickLocked = true;
+          self._highlighted = Math.max(0, self._highlighted - 1);
+          self._refresh();
+        } else if (sx > 0.5 && !self._stickLocked) {
+          self._stickLocked = true;
+          self._highlighted = Math.min(2, self._highlighted + 1);
+          self._refresh();
+        } else if (Math.abs(sx) < 0.25) {
+          self._stickLocked = false;
+        }
+      });
+    }
+  },
+
+  _buildPanel: function () {
+    var cam = document.querySelector('#cam');
+    if (!cam) return;
+
+    var panel = document.createElement('a-entity');
+    panel.setAttribute('position', '0 0.06 -0.55');
+    panel.setAttribute('visible', 'false');
+    cam.appendChild(panel);
+    this._panelEl = panel;
+
+    // Header
+    var header = document.createElement('a-text');
+    header.setAttribute('value', 'SELECT TOOL');
+    header.setAttribute('align', 'center');
+    header.setAttribute('color', '#aabbcc');
+    header.setAttribute('width', '0.55');
+    header.setAttribute('position', '0 0.145 0.002');
+    header.setAttribute('material', 'shader:flat');
+    panel.appendChild(header);
+
+    // Cards
+    var CARD_W = 0.20, CARD_H = 0.17, GAP = 0.025;
+    var startX  = -(CARD_W + GAP);   // 3 cards centred: -1, 0, +1
+
+    for (var i = 0; i < 3; i++) {
+      var cx   = startX + i * (CARD_W + GAP);
+      var card = document.createElement('a-entity');
+      card.setAttribute('position', cx + ' 0 0');
+      panel.appendChild(card);
+      this._cardEls.push(card);
+
+      // Background
+      var bg = document.createElement('a-plane');
+      bg.setAttribute('width', CARD_W);
+      bg.setAttribute('height', CARD_H);
+      bg.setAttribute('material', 'color:#1a2030; opacity:0.92; transparent:true; shader:flat; side:double');
+      card.appendChild(bg);
+      card._bg = bg;
+
+      // Tool name (big)
+      var nameEl = document.createElement('a-text');
+      nameEl.setAttribute('value', _TOOLS[i].name);
+      nameEl.setAttribute('align', 'center');
+      nameEl.setAttribute('baseline', 'center');
+      nameEl.setAttribute('color', '#aabbcc');
+      nameEl.setAttribute('width', '0.34');
+      nameEl.setAttribute('position', '0 0.042 0.003');
+      nameEl.setAttribute('material', 'shader:flat');
+      card.appendChild(nameEl);
+      card._nameEl = nameEl;
+
+      // Sub label (small)
+      var subEl = document.createElement('a-text');
+      subEl.setAttribute('value', _TOOLS[i].sub);
+      subEl.setAttribute('align', 'center');
+      subEl.setAttribute('baseline', 'center');
+      subEl.setAttribute('color', '#445566');
+      subEl.setAttribute('width', '0.25');
+      subEl.setAttribute('position', '0 0.008 0.003');
+      subEl.setAttribute('material', 'shader:flat');
+      card.appendChild(subEl);
+      card._subEl = subEl;
+
+      // Active dot (shows which tool is currently live)
+      var dot = document.createElement('a-circle');
+      dot.setAttribute('radius', '0.007');
+      dot.setAttribute('position', '0 -0.055 0.003');
+      dot.setAttribute('material', 'color:#4466aa; shader:flat; side:double');
+      dot.setAttribute('visible', 'false');
+      card.appendChild(dot);
+      card._dot = dot;
+    }
+
+    // Description box below the cards
+    var descBg = document.createElement('a-plane');
+    descBg.setAttribute('width', '0.68');
+    descBg.setAttribute('height', '0.09');
+    descBg.setAttribute('position', '0 -0.145 0');
+    descBg.setAttribute('material', 'color:#0d1020; opacity:0.90; transparent:true; shader:flat; side:double');
+    panel.appendChild(descBg);
+
+    var descEl = document.createElement('a-text');
+    descEl.setAttribute('value', '');
+    descEl.setAttribute('align', 'center');
+    descEl.setAttribute('baseline', 'center');
+    descEl.setAttribute('color', '#88aacc');
+    descEl.setAttribute('width', '0.64');
+    descEl.setAttribute('wrap-count', '42');
+    descEl.setAttribute('position', '0 -0.145 0.003');
+    descEl.setAttribute('material', 'shader:flat');
+    panel.appendChild(descEl);
+    this._descEl = descEl;
+
+    // Hint line
+    var hint = document.createElement('a-text');
+    hint.setAttribute('value', 'L-stick ← → to pick  |  release R-stick to confirm');
+    hint.setAttribute('align', 'center');
+    hint.setAttribute('color', '#334455');
+    hint.setAttribute('width', '0.62');
+    hint.setAttribute('position', '0 -0.215 0.003');
+    hint.setAttribute('material', 'shader:flat');
+    panel.appendChild(hint);
+  },
+
+  _refresh: function () {
+    var placer = this.el.sceneEl.components['vr-placer'];
+    var active = placer ? placer._toolMode : -1;
+
+    for (var i = 0; i < 3; i++) {
+      var card = this._cardEls[i];
+      if (!card) continue;
+      var isHL  = (i === this._highlighted);
+      var isAct = (i === active);
+
+      if (card._bg) {
+        card._bg.setAttribute('material',
+          'color:' + (isHL ? '#2244aa' : '#1a2030') +
+          '; opacity:' + (isHL ? '0.97' : '0.92') +
+          '; transparent:true; shader:flat; side:double');
+      }
+      if (card._nameEl) card._nameEl.setAttribute('text', 'color', isHL ? '#ffffff' : '#556677');
+      if (card._subEl)  card._subEl.setAttribute('text',  'color', isHL ? '#88aaff' : '#334455');
+      if (card._dot) {
+        card._dot.setAttribute('visible', isAct ? 'true' : 'false');
+        if (isAct) card._dot.setAttribute('material',
+          'color:' + (isHL ? '#ffffff' : '#4466aa') + '; shader:flat; side:double');
+      }
+    }
+
+    if (this._descEl) {
+      this._descEl.setAttribute('text', 'value', _TOOLS[this._highlighted].desc);
     }
   }
 });

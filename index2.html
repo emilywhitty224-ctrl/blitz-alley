@@ -20,19 +20,19 @@
     // src: <a-asset-item> id in the scene
     // scale: same scale used by the staged entity
     window._radialMenuItems = [
-      { id: 'gatehouse',       name: 'GATEHOUSE',   src: '#gatehouse-glb',         scale: 0.232 },
-      { id: 'blackfriar',      name: 'BLACKFRIAR',  src: '#blackfriar-glb',        scale: 0.694 },
-      { id: 'princelet',       name: 'PRINCELET',   src: '#princelet-glb',         scale: 1.404 },
-      { id: 'factory',         name: 'FACTORY',     src: '#factory-glb',           scale: 0.771 },
-      { id: 'derelict-fac',    name: 'DERELICT',    src: '#derelict-factory-glb',  scale: 1.0   },
-      { id: 'vic-pack',        name: 'VIC.PACK',    src: '#victorian-pack-glb',    scale: 1.0   },
-      { id: 'brick-wall',      name: 'WALL',        src: '#brick-wall-glb',        scale: 1.0   },
-      { id: 'rubble',          name: 'RUBBLE',      src: '#rubble-glb',            scale: 1.0   },
-      { id: 'old-lamp',        name: 'LAMP',        src: '#old-lamp-glb',          scale: 1.0   },
-      { id: 'antique-shop',    name: 'ANTIQUE',     src: '#antique-shop-glb',      scale: 1.0   },
-      { id: 'vic-fence',       name: 'FENCE',       src: '#victorian-fence-glb',   scale: 1.0   },
-      { id: 'vic-street',      name: 'STREET',      src: '#victorian-street-glb',  scale: 1.0   },
-      { id: 'arch',            name: 'ARCH',        src: '#gunnersbury-arch-glb',  scale: 1.0   }
+      { id: 'gatehouse',    name: 'GATEHOUSE',  src: '#gatehouse-glb',        scale: 0.232, desc: 'Medieval stone gateway arch.\nGood as an entrance or ruin piece.' },
+      { id: 'blackfriar',   name: 'BLACKFRIAR', src: '#blackfriar-glb',       scale: 0.694, desc: 'Ornate Victorian pub frontage.\nDecorative terracotta facade.' },
+      { id: 'princelet',    name: 'PRINCELET',  src: '#princelet-glb',        scale: 1.404, desc: 'Georgian townhouse, 3 storeys.\nBrick terrace with sash windows.' },
+      { id: 'factory',      name: 'FACTORY',    src: '#factory-glb',          scale: 0.771, desc: 'Industrial brick mill.\nTall chimney stack. East End style.' },
+      { id: 'derelict-fac', name: 'DERELICT',   src: '#derelict-factory-glb', scale: 1.0,   desc: 'Bomb-damaged factory shell.\nCollapsed roof — place near rubble.' },
+      { id: 'vic-pack',     name: 'VIC.PACK',   src: '#victorian-pack-glb',   scale: 1.0,   desc: 'Victorian street dressing pack.\nLamp, pillar box, cobblestones.' },
+      { id: 'brick-wall',   name: 'WALL',       src: '#brick-wall-glb',       scale: 1.0,   desc: 'Brick boundary wall section.\nStack multiples to build longer runs.' },
+      { id: 'rubble',       name: 'RUBBLE',     src: '#rubble-glb',           scale: 1.0,   desc: 'LiDAR-scanned rubble pile.\nDrop at bomb sites or blocked ends.' },
+      { id: 'old-lamp',     name: 'LAMP',       src: '#old-lamp-glb',         scale: 1.0,   desc: 'Cast iron gas lamp post.\nPlace along streets or alley edges.' },
+      { id: 'antique-shop', name: 'ANTIQUE',    src: '#antique-shop-glb',     scale: 1.0,   desc: 'Victorian antique shop front.\nBay window and painted signage.' },
+      { id: 'vic-fence',    name: 'FENCE',      src: '#victorian-fence-glb',  scale: 1.0,   desc: 'Ornate Victorian iron fence.\nUse along garden or road edges.' },
+      { id: 'vic-street',   name: 'STREET',     src: '#victorian-street-glb', scale: 1.0,   desc: 'Victorian street section.\nCobbles and kerb. Tile the ground.' },
+      { id: 'arch',         name: 'ARCH',       src: '#gunnersbury-arch-glb', scale: 1.0,   desc: 'Stone arch, Gunnersbury style.\nGrand entrances or collapsed ruins.' }
     ];
 
     // Shared day/night toggle — called by both the world button and left trigger
@@ -155,6 +155,7 @@
   boundary-collider
   vr-placer
   radial-menu
+  tool-menu
   fog="type: linear; color: #b0c8e8; near: 60; far: 120"
   renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
   shadow="type: basic"
@@ -185,13 +186,13 @@
            position="0 3 -50" fire-flicker></a-light>
 
   <!-- ═══ GROUND ═══ -->
-  <a-plane position="30 0 -45" rotation="-90 0 0" width="240" height="160"
+  <a-plane position="0 0 -45" rotation="-90 0 0" width="120" height="120"
            material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
 
   <a-sky color="#87ceeb"></a-sky>
 
   <!-- ═══ DAY / NIGHT toggle button ═══ -->
-  <a-entity position="5.5 0 -33">
+  <a-entity position="1.0 0 -33">
     <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
            material="color:#223344; shader:flat"></a-box>
     <a-box class="btn" id="night-btn"
@@ -207,7 +208,7 @@
   </a-entity>
 
   <!-- ═══ VISITOR MODE button — switches to walk/test mode ═══ -->
-  <a-entity position="10.9 0 -33">
+  <a-entity position="2.6 0 -33">
     <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
            material="color:#223322; shader:flat"></a-box>
     <a-box class="btn" id="visitor-btn"
@@ -223,7 +224,7 @@
   </a-entity>
 
   <!-- ═══ RESET MAP button — two-step confirmation ═══ -->
-  <a-entity position="8.2 0 -33">
+  <a-entity position="1.8 0 -33">
     <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
            material="color:#223344; shader:flat"></a-box>
     <!-- stage 1: normal state -->
@@ -237,32 +238,23 @@
             color="#445566" width="2" material="shader:flat"></a-text>
   </a-entity>
 
-  <!-- ═══ GROUND ZERO marker — glowing ring at spawn reference point ═══ -->
-  <a-torus position="0 0.02 -33" rotation="-90 0 0" radius="1.2" radius-tubular="0.04"
-           material="color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.7; transparent:true">
-  </a-torus>
-  <a-text value="GROUND ZERO" position="0 0.05 -31.6" rotation="-90 0 0"
-          color="#00ffcc" width="4" align="center"
-          material="shader:flat"></a-text>
-
-  <!-- ── Compass rose — flat on ground around ground zero ── -->
-  <a-torus position="0 0.01 -33" rotation="-90 0 0" radius="3.5" radius-tubular="0.03"
-           material="color:#334455; emissive:#223344; emissiveIntensity:0.5; shader:flat; opacity:0.6; transparent:true"></a-torus>
-  <a-text value="N" position="0 0.02 -36.6"  rotation="-90 0 0" color="#ff4444" width="3" align="center" material="shader:flat"></a-text>
-  <a-text value="S" position="0 0.02 -29.4"  rotation="-90 0 0" color="#ff4444" width="3" align="center" material="shader:flat"></a-text>
-  <a-text value="E" position="3.6 0.02 -33"  rotation="-90 0 0" color="#aaaaff" width="3" align="center" material="shader:flat"></a-text>
-  <a-text value="W" position="-3.6 0.02 -33" rotation="-90 0 0" color="#aaaaff" width="3" align="center" material="shader:flat"></a-text>
-  <!-- Tick lines at cardinal points -->
-  <a-box position="0 0.02 -36.5"  rotation="-90 0 0"   width="0.08" height="0.5" depth="0.02" material="color:#ff4444; shader:flat"></a-box>
-  <a-box position="0 0.02 -29.5"  rotation="-90 0 0"   width="0.08" height="0.5" depth="0.02" material="color:#ff4444; shader:flat"></a-box>
-  <a-box position="3.5 0.02 -33"  rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
-  <a-box position="-3.5 0.02 -33" rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
+  <!-- ═══ SPAWN MARKER — shows exactly where the player loads in ═══ -->
+  <!-- Left foot -->
+  <a-box position="-0.11 0.005 -33.08" width="0.09" height="0.01" depth="0.22"
+         material="color:#ffffff; emissive:#ffffff; emissiveIntensity:0.6; shader:flat; opacity:0.55; transparent:true"></a-box>
+  <!-- Right foot -->
+  <a-box position=" 0.11 0.005 -33.08" width="0.09" height="0.01" depth="0.22"
+         material="color:#ffffff; emissive:#ffffff; emissiveIntensity:0.6; shader:flat; opacity:0.55; transparent:true"></a-box>
+  <!-- Forward arrow — points in the direction the player faces on load -->
+  <a-text value="▲" position="0 0.01 -32.6" rotation="-90 0 0"
+          color="#ffffff" width="0.8" align="center"
+          material="shader:flat; opacity:0.4; transparent:true"></a-text>
 
   <!-- ── Controls card — grabbable, starts on the wall to the left of spawn ── -->
   <!-- Grab with right grip laser like any building. Hold it up to read. -->
   <!-- Controls card — A5 portrait, grabbable, hanging left of spawn -->
   <a-entity class="placeable" data-name="controls-card" id="controls-card"
-            position="-3 1.5 -35" rotation="0 20 0">
+            position="-1.0 1.2 -34.5" rotation="0 15 0">
     <a-plane width="0.21" height="0.30"
              material="color:#f5f0e8; shader:flat; side:double"></a-plane>
     <!-- single text block, baseline top, tight wrap -->
@@ -275,7 +267,7 @@ Grip: laser on / select
 L-Stick: nudge 10 cm
 R-Stick L/R: spin
 R-Stick U/D: scale
-Stick click: clone
+Stick click: tool menu
 A: floor snap
 A x2: lock / unlock
 
@@ -306,75 +298,8 @@ Green post: visitor mode"
     </a-text>
   </a-entity>
 
-  <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
-  <!-- Gatehouse straight ahead on load. Others staged to the right. -->
-  <a-entity class="placeable" night-aware data-name="gatehouse" id="b-gatehouse"
-    gltf-model="#gatehouse-glb"
-    position="0 0 -45" rotation="0 0 0" scale="0.232 0.232 0.232">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="blackfriar" id="b-blackfriar"
-    gltf-model="#blackfriar-glb"
-    position="20 0 -45" rotation="0 0 0" scale="0.694 0.694 0.694">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="princelet" id="b-princelet"
-    gltf-model="#princelet-glb"
-    position="40 0 -45" rotation="0 0 0" scale="1.404 1.404 1.404">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="factory" id="b-factory"
-    gltf-model="#factory-glb"
-    position="60 0 -45" rotation="0 0 0" scale="0.771 0.771 0.771">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="derelict-factory" id="b-derelict-factory"
-    gltf-model="#derelict-factory-glb"
-    position="80 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="victorian-pack" id="b-victorian-pack"
-    gltf-model="#victorian-pack-glb"
-    position="100 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="brick-wall" id="b-brick-wall"
-    gltf-model="#brick-wall-glb"
-    position="120 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="rubble" id="b-rubble"
-    gltf-model="#rubble-glb"
-    position="140 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="old-lamp" id="b-old-lamp"
-    gltf-model="#old-lamp-glb"
-    position="160 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="antique-shop" id="b-antique-shop"
-    gltf-model="#antique-shop-glb"
-    position="180 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="victorian-fence" id="b-victorian-fence"
-    gltf-model="#victorian-fence-glb"
-    position="200 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="victorian-street" id="b-victorian-street"
-    gltf-model="#victorian-street-glb"
-    position="220 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <a-entity class="placeable" night-aware data-name="gunnersbury-arch" id="b-gunnersbury-arch"
-    gltf-model="#gunnersbury-arch-glb"
-    position="240 0 -45" rotation="0 0 0" scale="1 1 1">
-  </a-entity>
-
-  <!-- All assets now compressed and added above -->
-  </a-entity>
+  <!-- ═══ BUILDINGS — spawned via left-trigger radial wheel menu ═══ -->
+  <!-- No staged entities needed. Radial wheel creates fresh copies from assets. -->
 
   <!-- ═══ PLAYER ═══
        Spawns at ground zero, looking toward the buildings. -->
