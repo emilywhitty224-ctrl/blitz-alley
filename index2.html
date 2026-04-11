@@ -991,7 +991,9 @@
     <a-asset-item id="gatehouse-glb"   src="st_bartholomews_gatehouse.glb"></a-asset-item>
     <a-asset-item id="princelet-glb"   src="4_princelet_street.glb"></a-asset-item>
     <a-asset-item id="blackfriar-glb"  src="the_blackfriar_pub.glb"></a-asset-item>
-    <a-asset-item id="factory-glb"     src="victorian_factory.glb"></a-asset-item>
+    <a-asset-item id="factory-glb"          src="victorian_factory.glb"></a-asset-item>
+    <a-asset-item id="derelict-factory-glb" src="low_poly_derelict_factory.glb"></a-asset-item>
+    <a-asset-item id="victorian-pack-glb"   src="modular_victorian_asset_pack.glb"></a-asset-item>
   </a-assets>
 
   <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
@@ -1086,6 +1088,16 @@
   <a-entity class="placeable" data-name="factory" id="b-factory"
     gltf-model="#factory-glb"
     position="60 0 -45" rotation="0 0 0" scale="0.771 0.771 0.771">
+  </a-entity>
+
+  <a-entity class="placeable" data-name="derelict-factory" id="b-derelict-factory"
+    gltf-model="#derelict-factory-glb"
+    position="80 0 -45" rotation="0 0 0" scale="1 1 1">
+  </a-entity>
+
+  <a-entity class="placeable" data-name="victorian-pack" id="b-victorian-pack"
+    gltf-model="#victorian-pack-glb"
+    position="100 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
   <!-- fence + antique shop removed — too large, cause Quest memory issues -->
