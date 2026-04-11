@@ -276,6 +276,7 @@ AFRAME.registerComponent('vr-placer', {
     self._slowCtrlPos = new THREE.Vector3(); // slow-mode: current controller world pos
     self._slowLastPos = new THREE.Vector3(); // slow-mode: previous frame pos
     self._slowTracked = false;               // slow-mode: true once first valid pos captured
+    self._dotVisible  = false;               // track landing dot visibility to avoid redundant setAttribute
     self._leftOrigin  = new THREE.Vector3();
     self._leftDir     = new THREE.Vector3();
     self._leftDist    = new THREE.Vector3();
@@ -485,7 +486,7 @@ AFRAME.registerComponent('vr-placer', {
           // _toolMode intentionally NOT reset — stays active until changed in panel
           // Dim laser back to idle (don't hide — always on)
           if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
-          if (self._landingDot) self._landingDot.setAttribute('visible', 'false');
+          if (self._landingDot && self._dotVisible) { self._landingDot.setAttribute('visible', 'false'); self._dotVisible = false; }
           self._playerRotLock = null;
           self._playerPosLock = null;
           self._slowTracked = false; // clear slow-mode delta tracking
@@ -883,7 +884,7 @@ AFRAME.registerComponent('vr-placer', {
         this._playerRotLock = null;
         this._playerPosLock = null;
         if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
-        if (this._landingDot) this._landingDot.setAttribute('visible', 'false');
+        if (this._landingDot && this._dotVisible) { this._landingDot.setAttribute('visible', 'false'); this._dotVisible = false; }
         window._vrPlacerHeld = false;
       }
     }
@@ -900,7 +901,7 @@ AFRAME.registerComponent('vr-placer', {
     // In visitor mode: dim laser to invisible, clear any hover/hold
     if (window._visitorMode) {
       if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0; transparent:true');
-      if (this._landingDot) this._landingDot.setAttribute('visible', 'false');
+      if (this._landingDot && this._dotVisible) { this._landingDot.setAttribute('visible', 'false'); this._dotVisible = false; }
       if (this._lastHovered) {
         if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
         this._lastHovered = null;
@@ -1009,7 +1010,7 @@ AFRAME.registerComponent('vr-placer', {
 
     if (!this.held) {
       // Hide landing dot when nothing held
-      if (this._landingDot) this._landingDot.setAttribute('visible', 'false');
+      if (this._landingDot && this._dotVisible) { this._landingDot.setAttribute('visible', 'false'); this._dotVisible = false; }
     } else {
 
     // ── Move ──────────────────────────────────────────────────────────────
@@ -1036,7 +1037,7 @@ AFRAME.registerComponent('vr-placer', {
             this.held.object3D.position.x,
             this.held.object3D.position.y + 0.02,
             this.held.object3D.position.z);
-          this._landingDot.setAttribute('visible', 'true');
+          if (!this._dotVisible) { this._landingDot.setAttribute('visible', 'true'); this._dotVisible = true; }
         }
       } else {
         // Laser → floor intersection: aim laser at floor, building follows hit point
@@ -1053,7 +1054,7 @@ AFRAME.registerComponent('vr-placer', {
             this.held.object3D.position.z = _nz;
             if (this._landingDot) {
               this._landingDot.object3D.position.set(_nx, planeY + 0.02, _nz);
-              this._landingDot.setAttribute('visible', 'true');
+              if (!this._dotVisible) { this._landingDot.setAttribute('visible', 'true'); this._dotVisible = true; }
             }
           }
         }
