@@ -284,11 +284,16 @@ AFRAME.registerComponent('vr-placer', {
     self._nudgeZ      = false;
     self._tiltMode    = false;
     self._toolMode    = 0; // 0=normal 1=tilt 2=height (right stick Y)
+    self._camEl       = null;
+    self._locoFwd     = new THREE.Vector3();
+    self._locoRight   = new THREE.Vector3();
+    self._locoCQ      = new THREE.Quaternion();
 
     this.el.sceneEl.addEventListener('loaded', function () {
       var cam       = document.querySelector('#cam');
       var rigEl     = document.querySelector('#rig');
       self._rigEl   = rigEl;
+      self._camEl   = cam;
       var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
       var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
       self._rightCtrlEl = rightCtrl;
@@ -296,8 +301,8 @@ AFRAME.registerComponent('vr-placer', {
 
       // World-space clickable buttons — scene can override via window._vrPlacerBtnPts
       self._btnPts = window._vrPlacerBtnPts || [
-        { pos: new THREE.Vector3(5.5,  1.15, -33), fn: function () { if (window.toggleNight) window.toggleNight(); } },
-        { pos: new THREE.Vector3(10.9, 1.15, -33), fn: function () { if (window.toggleVisitorMode) window.toggleVisitorMode(); } }
+        { pos: new THREE.Vector3(1.0,  1.55, -33.5), fn: function () { if (window.toggleNight) window.toggleNight(); } },
+        { pos: new THREE.Vector3(2.6,  1.55, -33.5), fn: function () { if (window.toggleVisitorMode) window.toggleVisitorMode(); } }
       ];
       self._btnRay = new THREE.Ray();
 
@@ -378,7 +383,7 @@ AFRAME.registerComponent('vr-placer', {
       readout.setAttribute('visible', 'false');
       cam.appendChild(readout);
       self.readout = readout;
-      self.readoutTimer = 0;
+      self.readoutTimer = -1;
       self.outPanel = outPanel;
       self.outText  = outText;
 
@@ -391,7 +396,6 @@ AFRAME.registerComponent('vr-placer', {
             self._playerRotLock = rigEl.object3D.rotation.y;
             self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
           }
-          try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0; camera: #cam'); } catch(e) {}
           if (self.hovered) {
             self.history.push({
               el:    self.hovered,
@@ -431,7 +435,6 @@ AFRAME.registerComponent('vr-placer', {
           laserPivot.setAttribute('visible', 'false');
           self._playerRotLock = null;
           self._playerPosLock = null;
-          try { if (rigEl) rigEl.setAttribute('movement-controls', 'fly: false; speed: 0.8; camera: #cam'); } catch(e) {}
           if (justReleased) {
             requestAnimationFrame(function () {
               var id  = justReleased.getAttribute('data-name');
@@ -692,6 +695,21 @@ AFRAME.registerComponent('vr-placer', {
     if (!this.laserPivot) return;
     this.frameCount++;
 
+    // Safety: un-stick grip state if the grip button is no longer physically held
+    if (this.gripping && this._rightCtrlEl) {
+      var _tc = this._rightCtrlEl.components['tracked-controls-webxr'] ||
+                this._rightCtrlEl.components['tracked-controls'];
+      var _gp = _tc && _tc.controller && _tc.controller.gamepad;
+      if (_gp && _gp.buttons[1] && !_gp.buttons[1].pressed) {
+        this.gripping = false;
+        this.moving   = false;
+        this.held     = null;
+        this._playerRotLock = null;
+        this._playerPosLock = null;
+        this.laserPivot.setAttribute('visible', 'false');
+      }
+    }
+
     // Lock rig rotation + position every frame while gripping
     if (this._rigEl && this._playerRotLock !== null) {
       this._rigEl.object3D.rotation.y = this._playerRotLock;
@@ -862,20 +880,25 @@ AFRAME.registerComponent('vr-placer', {
     var adjusting = this._tiltMode ? false : adjusting;
 
     // ── Live scale readout ────────────────────────────────────────────────
-    if (this.readout) {
-      if (adjusting) { this.readoutTimer = 90; }
-      if (this.readoutTimer > 0) {
-        this.readoutTimer--;
-        if (this.frameCount % 6 === 0) {
-          this.readout.setAttribute('text', 'value', 'scale  ' + this.held.object3D.scale.x.toFixed(3));
-          this.readout.setAttribute('visible', 'true');
-        }
-      } else {
-        this.readout.setAttribute('visible', 'false');
+    if (this.readout && adjusting) {
+      this.readoutTimer = 90;
+      if (this.frameCount % 6 === 0) {
+        this.readout.setAttribute('text', 'value', 'scale  ' + this.held.object3D.scale.x.toFixed(3));
+        this.readout.setAttribute('visible', 'true');
       }
     }
 
     } // end if (this.held)
+
+    // ── Readout timer — hides display when it expires (runs always) ───────────
+    if (this.readout && this.readoutTimer >= 0) {
+      if (this.readoutTimer > 0) {
+        this.readoutTimer--;
+      } else {
+        this.readout.setAttribute('visible', 'false');
+        this.readoutTimer = -1;
+      }
+    }
 
     // ── Left laser hover + height control ────────────────────────────────
     if (this.leftLaserPivot && this.leftGripping && this.frameCount % 12 === 0) {
@@ -916,6 +939,34 @@ AFRAME.registerComponent('vr-placer', {
       }
     }
 
+    // ── Custom locomotion — left thumbstick direct drive (VR only) ───────────
+    if (!this._playerPosLock && this._leftCtrlEl && this._rigEl &&
+        this.el.sceneEl.is('vr-mode')) {
+      var ltcL = this._leftCtrlEl.components['tracked-controls-webxr'] ||
+                 this._leftCtrlEl.components['tracked-controls'];
+      var lgpL = ltcL && ltcL.controller && ltcL.controller.gamepad;
+      if (lgpL && lgpL.axes.length >= 4) {
+        var lmx = lgpL.axes[2];
+        var lmy = lgpL.axes[3];
+        if (Math.abs(lmx) > 0.15 || Math.abs(lmy) > 0.15) {
+          if (this._camEl) {
+            this._locoFwd.set(0, 0, -1);
+            this._locoRight.set(1, 0, 0);
+            this._camEl.object3D.getWorldQuaternion(this._locoCQ);
+            this._locoFwd.applyQuaternion(this._locoCQ);
+            this._locoFwd.y = 0;
+            if (this._locoFwd.lengthSq() > 0.0001) this._locoFwd.normalize();
+            this._locoRight.applyQuaternion(this._locoCQ);
+            this._locoRight.y = 0;
+            if (this._locoRight.lengthSq() > 0.0001) this._locoRight.normalize();
+            var spd = (window._visitorMode ? 0.35 : 0.2) / 60;
+            this._rigEl.object3D.position.x += this._locoFwd.x * (-lmy) * spd + this._locoRight.x * lmx * spd;
+            this._rigEl.object3D.position.z += this._locoFwd.z * (-lmy) * spd + this._locoRight.z * lmx * spd;
+          }
+        }
+      }
+    }
+
     } catch (e) { console.error('vr-placer tick error:', e); }
   }
 });
@@ -941,7 +992,8 @@ AFRAME.registerComponent('radial-menu', {
     self._pageLabel  = null;
     self._nameLabel  = null;
     self._leftCtrlEl = null;
-    self._spawnCounts = {};
+    self._spawnCounts    = {};
+    self._lastHighlighted = -1;
 
     this.el.sceneEl.addEventListener('loaded', function () {
       var leftCtrl = document.querySelector('[oculus-touch-controls*="left"]');
@@ -958,12 +1010,15 @@ AFRAME.registerComponent('radial-menu', {
         });
 
         leftCtrl.addEventListener('triggerup', function () {
-          if (self._highlighted >= 0) {
+          // Use last-known highlight — stick may have snapped back to centre first
+          var slot = self._highlighted >= 0 ? self._highlighted : self._lastHighlighted;
+          if (slot >= 0) {
             var items = self._items();
-            var item  = items[self._page * 8 + self._highlighted];
+            var item  = items[self._page * 8 + slot];
             if (item) self._spawnItem(item);
           }
-          self._open = false;
+          self._open            = false;
+          self._lastHighlighted = -1;
           window._radialMenuOpen = false;
           self._highlighted = -1;
           if (self._wheelEl) self._wheelEl.setAttribute('visible', 'false');
@@ -1141,6 +1196,7 @@ AFRAME.registerComponent('radial-menu', {
     var entity = document.createElement('a-entity');
     entity.setAttribute('class', 'placeable');
     entity.setAttribute('night-aware', '');
+    entity.setAttribute('ground-clamp', '');
     entity.setAttribute('data-name', name);
     entity.setAttribute('gltf-model', item.src);
     entity.setAttribute('position',   px + ' 0 ' + pz);
@@ -1201,6 +1257,7 @@ AFRAME.registerComponent('radial-menu', {
 
     if (newHighlight === this._highlighted) return;
     this._highlighted = newHighlight;
+    if (newHighlight >= 0) this._lastHighlighted = newHighlight;
 
     // Update visual highlight
     var items = this._items();
@@ -1254,18 +1311,14 @@ var _TOOLS = [
   }
 ];
 
-window._toolMenuOpen = false;
-
 AFRAME.registerComponent('tool-menu', {
   init: function () {
     var self = this;
-    self._open        = false;
-    self._highlighted = 0;
-    self._panelEl     = null;
-    self._cardEls     = [];
-    self._descEl      = null;
-    self._leftCtrlEl  = null;
-    self._stickLocked = false;
+    self._highlighted  = 0;
+    self._panelEl      = null;
+    self._cardEls      = [];
+    self._descEl       = null;
+    self._dismissTimer = -1;
 
     this.el.sceneEl.addEventListener('loaded', function () {
       self._buildPanel();
@@ -1275,68 +1328,35 @@ AFRAME.registerComponent('tool-menu', {
 
   _bindControls: function () {
     var self = this;
-
     var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
-    var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
-
     if (!rightCtrl) {
       setTimeout(function () { self._bindControls(); }, 500);
       return;
     }
 
-    self._leftCtrlEl = leftCtrl;
-
-    // Right thumbstick press → open tool menu (only when not holding a building)
+    // Right stick click while NOT holding → cycle tool mode and show panel briefly
     rightCtrl.addEventListener('thumbstickdown', function () {
       var placer = self.el.sceneEl.components['vr-placer'];
-      if (placer && placer.held) return;       // holding a building — let vr-placer handle it
-      if (window._radialMenuOpen)   return;    // building wheel is open
-      if (self._open)               return;
+      if (window._radialMenuOpen)  return;
+      if (placer && placer.held)   return; // holding — let vr-placer cycle mode instead
 
-      self._open        = true;
-      window._toolMenuOpen = true;
-      var active = placer ? placer._toolMode : 0;
-      self._highlighted = active;
+      var cur  = placer ? placer._toolMode : 0;
+      var next = (cur + 1) % 3;
+      if (placer) placer._toolMode = next;
+      self._highlighted  = next;
+      self._dismissTimer = 120; // show for ~2 s then auto-dismiss
       self._refresh();
       if (self._panelEl) self._panelEl.setAttribute('visible', 'true');
     });
+  },
 
-    // Release → apply selection & close
-    rightCtrl.addEventListener('thumbstickup', function () {
-      if (!self._open) return;
-      var placer = self.el.sceneEl.components['vr-placer'];
-      if (placer) {
-        placer._toolMode = self._highlighted;
-        // Flash the readout with the new mode name
-        var modeNames = ['NORMAL  (spin + scale)', 'TILT  (lean X / Z)', 'HEIGHT  (raise / lower)'];
-        if (placer.readout) {
-          placer.readout.setAttribute('text', 'value', modeNames[self._highlighted]);
-          placer.readout.setAttribute('visible', 'true');
-          placer.readoutTimer = 180;
-        }
-      }
-      self._open = false;
-      window._toolMenuOpen = false;
-      if (self._panelEl) self._panelEl.setAttribute('visible', 'false');
-    });
-
-    // Left stick ← / → to move highlight while menu is open
-    if (leftCtrl) {
-      leftCtrl.addEventListener('thumbstickmoved', function (e) {
-        if (!self._open) return;
-        var sx = e.detail.x;
-        if (sx < -0.5 && !self._stickLocked) {
-          self._stickLocked = true;
-          self._highlighted = Math.max(0, self._highlighted - 1);
-          self._refresh();
-        } else if (sx > 0.5 && !self._stickLocked) {
-          self._stickLocked = true;
-          self._highlighted = Math.min(2, self._highlighted + 1);
-          self._refresh();
-        } else if (Math.abs(sx) < 0.25) {
-          self._stickLocked = false;
-        }
-      });
+  tick: function () {
+    if (this._dismissTimer < 0) return;
+    if (this._dismissTimer > 0) {
+      this._dismissTimer--;
+    } else {
+      if (this._panelEl) this._panelEl.setAttribute('visible', 'false');
+      this._dismissTimer = -1;
     }
   },
 
@@ -1435,7 +1455,7 @@ AFRAME.registerComponent('tool-menu', {
 
     // Hint line
     var hint = document.createElement('a-text');
-    hint.setAttribute('value', 'L-stick ← → to pick  |  release R-stick to confirm');
+    hint.setAttribute('value', 'R-stick click to cycle  —  auto-dismisses');
     hint.setAttribute('align', 'center');
     hint.setAttribute('color', '#334455');
     hint.setAttribute('width', '0.62');

@@ -78,13 +78,13 @@
           // VISITOR: disable placer laser, normal walk speed, hide builder UI
           if (vBtn) vBtn.setAttribute('material', 'color:#003300; emissive:#00ff44; emissiveIntensity:1; shader:flat');
           if (vLbl) vLbl.setAttribute('value', 'VISITOR');
-          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 1.4; camera: #cam');
+          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 0.35; camera: #cam');
           if (scene) scene.setAttribute('vr-placer', 'disabled: true');
         } else {
           // BUILD: re-enable placer, builder speed
           if (vBtn) vBtn.setAttribute('material', 'color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat');
           if (vLbl) vLbl.setAttribute('value', 'BUILD');
-          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 0.8; camera: #cam');
+          if (rig)  rig.setAttribute('movement-controls', 'fly: false; speed: 0.2; camera: #cam');
           if (scene) scene.setAttribute('vr-placer', 'disabled: false');
         }
       };
@@ -191,64 +191,82 @@
 
   <a-sky color="#87ceeb"></a-sky>
 
-  <!-- ═══ DAY / NIGHT toggle button ═══ -->
-  <a-entity position="1.0 0 -33">
-    <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
-           material="color:#223344; shader:flat"></a-box>
+  <!-- ═══ DAY / NIGHT toggle button — floating at eye height ═══ -->
+  <a-entity position="1.0 1.55 -33.5">
     <a-box class="btn" id="night-btn"
-           width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
+           width="0.4" height="0.22" depth="0.08" position="0 0 0"
            material="color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat">
     </a-box>
-    <a-text id="night-label" value="DAY / NIGHT" position="0 1.42 0" align="center"
+    <a-text id="night-label" value="DAY / NIGHT" position="0 0.18 0" align="center"
             color="#88ccff" width="2.5" material="shader:flat"></a-text>
-    <a-text value="(look 1.5s)" position="0 1.27 0" align="center"
+    <a-text value="look 1.5 s" position="0 0.03 0.045" align="center"
             color="#445566" width="1.8" material="shader:flat"></a-text>
-    <a-text id="version-label" value="" position="0 1.12 0" align="center"
+    <a-text id="version-label" value="" position="0 -0.15 0" align="center"
             color="#334455" width="1.6" material="shader:flat"></a-text>
   </a-entity>
 
-  <!-- ═══ VISITOR MODE button — switches to walk/test mode ═══ -->
-  <a-entity position="2.6 0 -33">
-    <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
-           material="color:#223322; shader:flat"></a-box>
+  <!-- ═══ VISITOR MODE button — floating at eye height ═══ -->
+  <a-entity position="2.6 1.55 -33.5">
     <a-box class="btn" id="visitor-btn"
-           width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
+           width="0.4" height="0.22" depth="0.08" position="0 0 0"
            material="color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat">
     </a-box>
-    <a-text id="visitor-lbl" value="VISITOR MODE" position="0 1.42 0" align="center"
+    <a-text id="visitor-lbl" value="VISITOR MODE" position="0 0.18 0" align="center"
             color="#aaffaa" width="2.5" material="shader:flat"></a-text>
-    <a-text value="(look 1.5s)" position="0 1.27 0" align="center"
+    <a-text value="look 1.5 s" position="0 0.03 0.045" align="center"
             color="#445566" width="1.8" material="shader:flat"></a-text>
-    <a-text id="visitor-sub" value="BUILD" position="0 1.12 0" align="center"
+    <a-text id="visitor-sub" value="BUILD" position="0 -0.15 0" align="center"
             color="#556644" width="1.6" material="shader:flat"></a-text>
   </a-entity>
 
-  <!-- ═══ RESET MAP button — two-step confirmation ═══ -->
-  <a-entity position="1.8 0 -33">
-    <a-box width="0.07" height="1.1" depth="0.07" position="0 0.55 0"
-           material="color:#223344; shader:flat"></a-box>
-    <!-- stage 1: normal state -->
+  <!-- ═══ RESET MAP button — floating at eye height ═══ -->
+  <a-entity position="1.8 1.55 -33.5">
     <a-box class="btn" id="reset-btn"
-           width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
+           width="0.4" height="0.22" depth="0.08" position="0 0 0"
            material="color:#221111; emissive:#aa1111; emissiveIntensity:1; shader:flat">
     </a-box>
-    <a-text id="reset-lbl" value="RESET MAP" position="0 1.4 0" align="center"
+    <a-text id="reset-lbl" value="RESET MAP" position="0 0.18 0" align="center"
             color="#ffaaaa" width="2.5" material="shader:flat"></a-text>
-    <a-text value="(look 1.5s)" position="0 1.02 0" align="center"
+    <a-text value="look 1.5 s" position="0 0.03 0.045" align="center"
             color="#445566" width="2" material="shader:flat"></a-text>
   </a-entity>
 
   <!-- ═══ SPAWN MARKER — shows exactly where the player loads in ═══ -->
-  <!-- Left foot -->
-  <a-box position="-0.11 0.005 -33.08" width="0.09" height="0.01" depth="0.22"
-         material="color:#ffffff; emissive:#ffffff; emissiveIntensity:0.6; shader:flat; opacity:0.55; transparent:true"></a-box>
-  <!-- Right foot -->
-  <a-box position=" 0.11 0.005 -33.08" width="0.09" height="0.01" depth="0.22"
-         material="color:#ffffff; emissive:#ffffff; emissiveIntensity:0.6; shader:flat; opacity:0.55; transparent:true"></a-box>
-  <!-- Forward arrow — points in the direction the player faces on load -->
-  <a-text value="▲" position="0 0.01 -32.6" rotation="-90 0 0"
-          color="#ffffff" width="0.8" align="center"
-          material="shader:flat; opacity:0.4; transparent:true"></a-text>
+  <!-- Standing ring -->
+  <a-ring position="0 0.005 -33" rotation="-90 0 0"
+          radius-inner="0.28" radius-outer="0.33"
+          material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:1; shader:flat; opacity:0.75; transparent:true">
+  </a-ring>
+  <!-- Left foot — heel body -->
+  <a-box position="-0.11 0.005 -33.06" width="0.08" height="0.008" depth="0.17"
+         rotation="0 -10 0"
+         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
+  </a-box>
+  <!-- Left foot — toe bump -->
+  <a-box position="-0.13 0.005 -32.94" width="0.07" height="0.008" depth="0.07"
+         rotation="0 -10 0"
+         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
+  </a-box>
+  <!-- Right foot — heel body -->
+  <a-box position=" 0.11 0.005 -33.06" width="0.08" height="0.008" depth="0.17"
+         rotation="0 10 0"
+         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
+  </a-box>
+  <!-- Right foot — toe bump -->
+  <a-box position=" 0.13 0.005 -32.94" width="0.07" height="0.008" depth="0.07"
+         rotation="0 10 0"
+         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
+  </a-box>
+  <!-- Facing arrow — lies flat, ▲ points toward the scene (–Z = forward) -->
+  <a-text value="▲" position="0 0.005 -33.55" rotation="-90 0 0"
+          color="#00ffaa" width="0.9" align="center"
+          material="shader:flat; emissive:#00ffaa; emissiveIntensity:1; opacity:0.9; transparent:true">
+  </a-text>
+  <!-- START label — floating at waist height, visible from a distance -->
+  <a-text value="START" position="0 0.9 -33" rotation="0 0 0"
+          color="#00ffaa" width="2.0" align="center"
+          material="shader:flat; emissive:#00ffaa; emissiveIntensity:0.6; opacity:0.55; transparent:true">
+  </a-text>
 
   <!-- ── Controls card — grabbable, starts on the wall to the left of spawn ── -->
   <!-- Grab with right grip laser like any building. Hold it up to read. -->
@@ -262,32 +280,31 @@
       value="— CONTROLS —
 
 RIGHT HAND
-Grip: laser on / select
-+ Trigger: move building
-L-Stick: nudge 10 cm
+Grip: laser / select
++ Trigger: drag building
 R-Stick L/R: spin
 R-Stick U/D: scale
-Stick click: tool menu
+Stick click: cycle tool
 A: floor snap
 A x2: lock / unlock
 
-BOTH GRIPS
-R-Stick: tilt building
-A: snap to level
+TOOL MODES (cycle)
+NORMAL: spin + scale
+TILT:   lean X / Z
+HEIGHT: raise / lower
 
 LEFT HAND
-Trigger hold: spawn wheel
-  Stick: pick item
-  Release: spawn it
+Stick: walk
+Trigger hold: spawn menu
+  Stick: pick building
+  Release: spawn
   Stick click: next page
-Grip + Stick U/D: height
+Grip + Stick: set height
 Stick click: undo
-X + R.Grip: reset pos
-Y: save / export
 
-WORLD
-Blue post: day / night
-Green post: visitor mode"
+WORLD (look 1.5 s)
+Blue:  day / night
+Green: visitor / build"
       position="-0.093 0.138 0.002"
       align="left"
       baseline="top"
@@ -304,7 +321,7 @@ Green post: visitor mode"
   <!-- ═══ PLAYER ═══
        Spawns at ground zero, looking toward the buildings. -->
   <a-entity id="rig" position="0 0 -33"
-            movement-controls="fly: false; speed: 0.8; camera: #cam">
+            movement-controls="fly: false; speed: 0.2; camera: #cam">
     <a-entity id="cam" camera look-controls position="0 1.6 0">
       <!-- Gaze cursor: look at .btn objects for 1.5s to activate -->
       <a-cursor fuse="true" fuse-timeout="1500"
@@ -316,17 +333,17 @@ Green post: visitor mode"
     </a-entity>
 
     <a-entity oculus-touch-controls="hand: left">
-      <a-text value="X: markers"    position="0.032 0.018 -0.052" rotation="-50 0 0" color="#ffee44" width="0.16" align="left"></a-text>
-      <a-text value="Y: export pos" position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#44ffaa" width="0.16" align="left"></a-text>
-      <a-text value="trigger: clear" position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
-      <a-text value="stick: move"   position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
+      <a-text value="trigger: spawn" position="0.032 0.018 -0.052" rotation="-50 0 0" color="#ffee44" width="0.16" align="left"></a-text>
+      <a-text value="Y: save"        position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#44ffaa" width="0.16" align="left"></a-text>
+      <a-text value="grip: height"   position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
+      <a-text value="stick: walk"    position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
     </a-entity>
 
     <a-entity oculus-touch-controls="hand: right">
-      <a-text value="A: ref mark"    position="0.032 0.008 -0.052" rotation="-50 0 0" color="#ffaa44" width="0.16" align="left"></a-text>
-      <a-text class="lbl-b" value="B: fly" position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#88ff88" width="0.16" align="left"></a-text>
-      <a-text value="stick↓: capture" position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
-      <a-text value="stick: move"    position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
+      <a-text value="grip: grab"      position="0.032 0.008 -0.052" rotation="-50 0 0" color="#ffaa44" width="0.16" align="left"></a-text>
+      <a-text value="A: floor snap"   position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#88ff88" width="0.16" align="left"></a-text>
+      <a-text value="stick↓: tool"    position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
+      <a-text value="stick: spin/scale" position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.12" align="left"></a-text>
     </a-entity>
   </a-entity>
 
