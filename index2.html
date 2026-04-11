@@ -409,6 +409,7 @@
         self._leftQuat    = new THREE.Quaternion();
         self._spinPivot   = new THREE.Vector3(); // world-space XZ pivot for rotation
         self._spinOffset  = new THREE.Vector3(); // object centre relative to pivot
+        self._holdOffset  = new THREE.Vector3(); // building pos minus controller pos at triggerdown
         self._nudgeX      = false; // left stick X was above threshold last frame
         self._nudgeZ      = false; // left stick Y was above threshold last frame
         self._leftCtrlEl  = null;  // cached for left gamepad polling
@@ -581,7 +582,16 @@
             });
 
             rightCtrl.addEventListener('triggerdown', function () {
-              if (self.gripping && self.held) self.moving = true;
+              if (self.gripping && self.held) {
+                self.moving = true;
+                // Lock the offset between building and controller at this moment
+                laserPivot.object3D.getWorldPosition(self._tickOrigin);
+                self._holdOffset.set(
+                  self.held.object3D.position.x - self._tickOrigin.x,
+                  0,
+                  self.held.object3D.position.z - self._tickOrigin.z
+                );
+              }
             });
             rightCtrl.addEventListener('triggerup', function () {
               self.moving = false;
@@ -945,19 +955,13 @@
 
         if (!this.held) { } else {
 
-        // ── Move: grip + trigger ────────────────────────────────────────
+        // ── Move: grip + trigger — offset-locked to controller ─────────
+        // Building follows the controller exactly, maintaining the same
+        // XZ offset that existed the moment trigger was pressed.
         if (this.moving) {
           this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
-          this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
-          this._tickDir.set(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
-          if (this._tickDir.y < -0.001) {
-            var t = -this._tickOrigin.y / this._tickDir.y;
-            if (t > 0.3) {
-              this.groundPt.copy(this._tickOrigin).addScaledVector(this._tickDir, t);
-              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.012;
-              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.012;
-            }
-          }
+          this.held.object3D.position.x = this._tickOrigin.x + this._holdOffset.x;
+          this.held.object3D.position.z = this._tickOrigin.z + this._holdOffset.z;
         }
 
         // ── Poll gamepads directly — events miss held positions ───────────
@@ -1264,30 +1268,48 @@
   <a-box position="3.5 0.02 -33"  rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
   <a-box position="-3.5 0.02 -33" rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
 
-  <!-- ── Controls board — flat on the ground beside the compass ring ── -->
-  <a-plane position="2.8 0.02 -33" rotation="-90 0 0" width="3.6" height="4.0"
-           material="color:#000d08; opacity:0.9; transparent:true; shader:flat"></a-plane>
-
-  <a-text value="RIGHT HAND" position="2.8 0.03 -31.2" rotation="-90 0 0"
-          color="#44ffaa" width="3.2" align="center" material="shader:flat"></a-text>
-  <a-text value="GRIP alone         Point laser at building&#10;GRIP + TRIGGER  Drag building (slow)&#10;STICK left/right   Spin around aim point&#10;STICK up/down      Scale up / scale down&#10;STICK CLICK        Clone building&#10;A button           Snap to floor&#10;A button (x2)      Lock / unlock building&#10;B button           Toggle fly mode"
-          position="1.15 0.03 -31.5" rotation="-90 0 0"
-          color="#ccffee" width="3.2" align="left" wrap-count="36"
-          material="shader:flat"></a-text>
-
-  <a-text value="LEFT HAND" position="2.8 0.03 -33.5" rotation="-90 0 0"
-          color="#ffcc44" width="3.2" align="center" material="shader:flat"></a-text>
-  <a-text value="GRIP alone         Point laser at building&#10;GRIP + STICK U/D   Raise / lower height&#10;STICK CLICK        Undo last move&#10;X button           Stamp reference pole&#10;X + Right GRIP     Reset building position&#10;Y button           Export positions"
-          position="1.15 0.03 -33.8" rotation="-90 0 0"
-          color="#ffeecc" width="3.2" align="left" wrap-count="36"
-          material="shader:flat"></a-text>
-
-  <a-text value="WORLD BUTTONS" position="2.8 0.03 -35.4" rotation="-90 0 0"
-          color="#aaaaff" width="3.2" align="center" material="shader:flat"></a-text>
-  <a-text value="DAY/NIGHT post     Gaze at button 1.5s&#10;RESET MAP post     Gaze, then gaze again"
-          position="1.15 0.03 -35.7" rotation="-90 0 0"
-          color="#ddddff" width="3.2" align="left" wrap-count="36"
-          material="shader:flat"></a-text>
+  <!-- ── Controls card — grabbable, starts on the wall to the left of spawn ── -->
+  <!-- Grab with right grip laser like any building. Hold it up to read. -->
+  <a-entity class="placeable" data-name="controls-card" id="controls-card"
+            position="-3 1.4 -35" rotation="0 20 0">
+    <!-- Card backing — cream paper colour -->
+    <a-plane width="0.48" height="0.64"
+             material="color:#f5f0e8; shader:flat; side:double"></a-plane>
+    <!-- Header -->
+    <a-text value="CONTROLS" position="0 0.27 0.001" align="center"
+            color="#222222" width="1.7" material="shader:flat"></a-text>
+    <!-- RIGHT HAND section -->
+    <a-text value="RIGHT HAND" position="-0.21 0.20 0.001" align="left"
+            color="#007744" width="1.3" material="shader:flat"></a-text>
+    <a-text value="Grip            aim laser at building
+Grip+Trigger  drag to move
+L.Stick X/Z  nudge 10cm steps
+R.Stick L/R  spin (pivots on aim pt)
+R.Stick U/D  scale up / down
+Stick click   clone
+A button      snap to floor
+A x2          lock / unlock
+B button      fly on/off"
+            position="-0.215 0.08 0.001" align="left"
+            color="#333333" width="1.28" wrap-count="30"
+            material="shader:flat"></a-text>
+    <!-- LEFT HAND section -->
+    <a-text value="LEFT HAND" position="-0.21 -0.17 0.001" align="left"
+            color="#886600" width="1.3" material="shader:flat"></a-text>
+    <a-text value="Grip+Stick U/D  raise / lower
+Stick click    undo last move
+X button       stamp ref pole
+X+Right grip   reset building
+Y button       export / save"
+            position="-0.215 -0.26 0.001" align="left"
+            color="#333333" width="1.28" wrap-count="30"
+            material="shader:flat"></a-text>
+    <!-- World section -->
+    <a-text value="WORLD  Gaze at DAY/NIGHT or RESET MAP posts for 1.5s"
+            position="-0.215 -0.43 0.001" align="left"
+            color="#444466" width="1.28" wrap-count="30"
+            material="shader:flat"></a-text>
+  </a-entity>
 
   <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
   <!-- Gatehouse straight ahead on load. Others staged to the right. -->
