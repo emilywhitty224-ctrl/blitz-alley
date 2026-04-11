@@ -635,7 +635,7 @@ AFRAME.registerComponent('vr-placer', {
         });
 
         leftCtrl.addEventListener('thumbstickdown', function () {
-          if (window._radialMenuOpen) return;
+          if (window._radialMenuOpen || window._controlPanelOpen) return;
           self.doUndo();
         });
 
@@ -653,42 +653,12 @@ AFRAME.registerComponent('vr-placer', {
           if (!self.gripping) self._playerPosLock = null;
         });
 
-        // X — delete hovered or held building (removes from scene + all caches)
-        leftCtrl.addEventListener('xbuttondown', function () {
-          var target = self.held || self.hovered;
-          if (!target) return;
-          var delId = target.getAttribute('data-name');
-          // Release grip state if we're holding it
-          if (self.held === target) {
-            self.held     = null;
-            self.gripping = false;
-            self.moving   = false;
-            window._vrPlacerHeld = false;
-            if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
-            if (self._landingDot && self._dotVisible) { self._landingDot.setAttribute('visible', 'false'); self._dotVisible = false; }
-            self._slowTracked = false;
-            self._playerRotLock = null;
-            self._playerPosLock = null;
-          }
-          self.hovered = null;
-          // Remove from bboxCache, originals, history
-          delete self.bboxCache[delId];
-          delete self.originals[delId];
-          self.bboxKeys = Object.keys(self.bboxCache);
-          self.history     = self.history.filter(function (h) { return h.el !== target; });
-          self.redoHistory = self.redoHistory.filter(function (h) { return h.el !== target; });
-          // Remove from DOM
-          if (target.parentNode) target.parentNode.removeChild(target);
-          self._haptic(rightCtrl, 0.5, 80);
-          if (self.readout) {
-            self.readout.setAttribute('text', 'value', 'deleted  ' + delId);
-            self.readout.setAttribute('visible', 'true');
-            self.readoutTimer = 90;
-          }
-        });
+        // X — delete moved to control panel DELETE button to prevent accidental deletion
+        leftCtrl.addEventListener('xbuttondown', function () { /* no-op — use DELETE in control panel */ });
 
         // Y button — export positions + copy to clipboard
         leftCtrl.addEventListener('ybuttondown', function () {
+          if (window._controlPanelOpen) return;
           var vis = outPanel.getAttribute('visible');
           if (vis === 'true' || vis === true) {
             outPanel.setAttribute('visible', 'false');
@@ -800,6 +770,29 @@ AFRAME.registerComponent('vr-placer', {
         self.redoHistory = [];
         self.held = clone;
         return 'cloned ' + srcName;
+      };
+
+      self.doDelete = function () {
+        var target = self.held || self.hovered;
+        if (!target) return 'no building selected';
+        var delId = target.getAttribute('data-name');
+        if (self.held === target) {
+          self.held = null; self.gripping = false; self.moving = false;
+          window._vrPlacerHeld = false;
+          if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
+          if (self._landingDot && self._dotVisible) { self._landingDot.setAttribute('visible', 'false'); self._dotVisible = false; }
+          self._slowTracked = false;
+          self._playerRotLock = null; self._playerPosLock = null;
+        }
+        self.hovered = null;
+        delete self.bboxCache[delId];
+        delete self.originals[delId];
+        self.bboxKeys = Object.keys(self.bboxCache);
+        self.history     = self.history.filter(function (h) { return h.el !== target; });
+        self.redoHistory = self.redoHistory.filter(function (h) { return h.el !== target; });
+        if (target.parentNode) target.parentNode.removeChild(target);
+        self._haptic(rightCtrl, 0.5, 80);
+        return 'deleted  ' + delId;
       };
 
       self.doSave = function () {
@@ -1675,7 +1668,7 @@ var _CP_ITEMS = [
   { id:'save',    label:'SAVE',    sub:'save layout',   fn:function(p){return p&&p.doSave?p.doSave():'';} },
   { id:'reset',   label:'RESET',   sub:'clear all',     special:'reset', fn:null },
   { id:'slow',    label:'SLOW',    sub:'1:1 hand move',  fn:function(){ window._slowMoveMode = !window._slowMoveMode; return window._slowMoveMode ? 'SLOW move  ON' : 'SLOW move  OFF'; } },
-  { id:'grid',    label:'GRID',    sub:'0.5 m snap',    fn:function(){ window._gridSnap = !window._gridSnap; return window._gridSnap ? 'Grid snap  ON' : 'Grid snap  OFF'; } },
+  { id:'delete',  label:'DELETE',  sub:'remove held',   fn:function(p){return p&&p.doDelete?p.doDelete():'';} },
   { id:'help',    label:'HELP',    sub:'controls guide', fn:function(){ if (window._openHelpPanel) window._openHelpPanel(); return ''; } }
 ];
 

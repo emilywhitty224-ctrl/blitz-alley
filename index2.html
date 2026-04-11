@@ -89,27 +89,9 @@
       var vBtn2 = document.querySelector('#visitor-btn');
       if (vBtn2) vBtn2.addEventListener('click', window.toggleVisitorMode);
 
-      // ── Loading progress counter ─────────────────────────────────────────
-      var _loadingEl = document.querySelector('#loading-counter');
-      var _loadTotal = 13;
-      var _loadDone  = 0;
-      if (_loadingEl) {
-        _loadingEl.setAttribute('value', 'Loading 0 / ' + _loadTotal + '…');
-        document.querySelectorAll('[data-name$="-0"]').forEach(function (el) {
-          el.addEventListener('model-loaded', function () {
-            _loadDone++;
-            if (_loadDone >= _loadTotal) {
-              _loadingEl.setAttribute('value', 'All loaded ✓');
-              setTimeout(function () {
-                var p = _loadingEl.parentNode;
-                if (p) p.setAttribute('visible', 'false');
-              }, 2500);
-            } else {
-              _loadingEl.setAttribute('value', 'Loading ' + _loadDone + ' / ' + _loadTotal + '…');
-            }
-          });
-        });
-      }
+      // Loading counter — initial display only. Updates driven by sequential spawner below.
+      var _lcEl = document.querySelector('#loading-counter');
+      if (_lcEl) _lcEl.setAttribute('value', 'Loading 0 / 13\u2026');
 
       // Reset map — two-gaze confirmation
       var resetBtn  = document.querySelector('#reset-btn');
@@ -199,61 +181,9 @@
     <a-asset-item id="gunnersbury-arch-glb"    src="gunnersbury_arch.glb"></a-asset-item>
   </a-assets>
 
-  <!-- ═══ STAGING AREA — all 13 assets pre-spawned, no ground-clamp ═══ -->
+  <!-- ═══ STAGING AREA — spawned sequentially by JS below to avoid GPU OOM ═══ -->
   <!-- Single line along X axis, Z=-43 (10 m from spawn), 5 m between each building -->
   <!-- X runs from -30 to +30. Walk sideways to browse, grab and drag into position. -->
-
-  <a-entity class="placeable" night-aware data-name="gatehouse-0"
-            gltf-model="#gatehouse-glb"
-            position="-30 0 -43" scale="0.232 0.232 0.232"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="blackfriar-0"
-            gltf-model="#blackfriar-glb"
-            position="-25 0 -43" scale="0.694 0.694 0.694"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="princelet-0"
-            gltf-model="#princelet-glb"
-            position="-20 0 -43" scale="1.404 1.404 1.404"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="factory-0"
-            gltf-model="#factory-glb"
-            position="-15 0 -43" scale="0.771 0.771 0.771"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="derelict-fac-0"
-            gltf-model="#derelict-factory-glb"
-            position="-10 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="vic-pack-0"
-            gltf-model="#victorian-pack-glb"
-            position="-5 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="brick-wall-0"
-            gltf-model="#brick-wall-glb"
-            position="0 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="rubble-0"
-            gltf-model="#rubble-glb"
-            position="5 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="old-lamp-0"
-            gltf-model="#old-lamp-glb"
-            position="10 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="antique-shop-0"
-            gltf-model="#antique-shop-glb"
-            position="15 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="vic-fence-0"
-            gltf-model="#victorian-fence-glb"
-            position="20 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="vic-street-0"
-            gltf-model="#victorian-street-glb"
-            position="25 0 -43" scale="1.0 1.0 1.0"></a-entity>
-
-  <a-entity class="placeable" night-aware data-name="arch-0"
-            gltf-model="#gunnersbury-arch-glb"
-            position="30 0 -43" scale="1.0 1.0 1.0"></a-entity>
 
   <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
   <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>
@@ -451,5 +381,67 @@ Green: visitor / build"
   </a-entity>
 
 </a-scene>
+
+<script>
+  // ── SEQUENTIAL SPAWN — one entity at a time, each waiting for model-loaded ──
+  // Staggers GPU texture uploads to avoid OOM crash when all 13 load at once.
+  var _STAGED = [
+    { name:'gatehouse-0',    src:'#gatehouse-glb',        scale:0.232, x:-30 },
+    { name:'blackfriar-0',   src:'#blackfriar-glb',       scale:0.694, x:-25 },
+    { name:'princelet-0',    src:'#princelet-glb',        scale:1.404, x:-20 },
+    { name:'factory-0',      src:'#factory-glb',          scale:0.771, x:-15 },
+    { name:'derelict-fac-0', src:'#derelict-factory-glb', scale:1.0,   x:-10 },
+    { name:'vic-pack-0',     src:'#victorian-pack-glb',   scale:1.0,   x:-5  },
+    { name:'brick-wall-0',   src:'#brick-wall-glb',       scale:1.0,   x:0   },
+    { name:'rubble-0',       src:'#rubble-glb',           scale:1.0,   x:5   },
+    { name:'old-lamp-0',     src:'#old-lamp-glb',         scale:1.0,   x:10  },
+    { name:'antique-shop-0', src:'#antique-shop-glb',     scale:1.0,   x:15  },
+    { name:'vic-fence-0',    src:'#victorian-fence-glb',  scale:1.0,   x:20  },
+    { name:'vic-street-0',   src:'#victorian-street-glb', scale:1.0,   x:25  },
+    { name:'arch-0',         src:'#gunnersbury-arch-glb', scale:1.0,   x:30  }
+  ];
+  var _stageDone = 0;
+  var _stageTotal = _STAGED.length;
+
+  function _spawnNext(i) {
+    if (i >= _STAGED.length) return;
+    var d = _STAGED[i];
+    var e = document.createElement('a-entity');
+    e.setAttribute('class', 'placeable');
+    e.setAttribute('night-aware', '');
+    e.setAttribute('data-name', d.name);
+    e.setAttribute('gltf-model', d.src);
+    var s = d.scale;
+    e.setAttribute('position', d.x + ' 0 -43');
+    e.setAttribute('scale', s + ' ' + s + ' ' + s);
+    e.addEventListener('model-loaded', function () {
+      _stageDone++;
+      var lc = document.querySelector('#loading-counter');
+      if (lc) {
+        if (_stageDone >= _stageTotal) {
+          lc.setAttribute('value', 'All loaded \u2713');
+          setTimeout(function () {
+            var w = document.querySelector('#loading-counter-wrapper');
+            if (w) w.setAttribute('visible', 'false');
+          }, 2500);
+        } else {
+          lc.setAttribute('value', 'Loading ' + _stageDone + ' / ' + _stageTotal + '\u2026');
+        }
+      }
+      setTimeout(function () { _spawnNext(i + 1); }, 200);
+    });
+    e.addEventListener('model-error', function () {
+      _stageDone++;
+      var lc = document.querySelector('#loading-counter');
+      if (lc) lc.setAttribute('value', 'Loading ' + _stageDone + ' / ' + _stageTotal + '\u2026');
+      setTimeout(function () { _spawnNext(i + 1); }, 100);
+    });
+    document.querySelector('a-scene').appendChild(e);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    _spawnNext(0);
+  });
+</script>
 </body>
 </html>
