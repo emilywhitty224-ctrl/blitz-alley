@@ -378,17 +378,27 @@ AFRAME.registerComponent('vr-placer', {
       // ── Right laser pivot — tilted 45° down ─────────────────────────────
       var laserPivot = document.createElement('a-entity');
       laserPivot.setAttribute('rotation', '-45 0 0');
-      laserPivot.setAttribute('visible', 'false');
+      laserPivot.setAttribute('visible', 'true'); // always on — dims when idle
       var laser = document.createElement('a-box');
-      laser.setAttribute('width',  '0.005');
-      laser.setAttribute('height', '0.005');
+      laser.setAttribute('width',  '0.004');
+      laser.setAttribute('height', '0.004');
       laser.setAttribute('depth',  '20');
       laser.setAttribute('position', '0 0 -10');
-      laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
+      laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
       laserPivot.appendChild(laser);
       if (rightCtrl) rightCtrl.appendChild(laserPivot);
       self.laser      = laser;
       self.laserPivot = laserPivot;
+
+      // ── Landing dot — glowing ring on the floor showing laser endpoint ──
+      var landingDot = document.createElement('a-ring');
+      landingDot.setAttribute('radius-inner', '0.12');
+      landingDot.setAttribute('radius-outer', '0.18');
+      landingDot.setAttribute('rotation', '-90 0 0');
+      landingDot.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.8; transparent:true');
+      landingDot.setAttribute('visible', 'false');
+      self.el.sceneEl.appendChild(landingDot);
+      self._landingDot = landingDot;
 
       // ── Left laser pivot — orange, for height control ────────────────────
       var leftLaserPivot = document.createElement('a-entity');
@@ -434,7 +444,8 @@ AFRAME.registerComponent('vr-placer', {
       if (rightCtrl) {
         rightCtrl.addEventListener('gripdown', function () {
           self.gripping = true;
-          laserPivot.setAttribute('visible', 'true');
+          // Brighten laser on grip
+          if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.65; transparent:true');
           if (rigEl) {
             self._playerRotLock = rigEl.object3D.rotation.y;
             self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
@@ -447,26 +458,14 @@ AFRAME.registerComponent('vr-placer', {
               rotY:  self.hovered.object3D.rotation.y,
               scale: self.hovered.object3D.scale.x
             });
-            self.redoHistory = []; // new action clears redo stack
+            self.redoHistory = [];
             self._lastHovered = null;
-            if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
             self.held = self.hovered;
             window._vrPlacerHeld = true;
-            self._haptic(rightCtrl, 0.6, 100); // strong grab buzz
-            // Spin pivot = building centre XZ — rotates around its own axis
-            self._spinPivot.set(
-              self.held.object3D.position.x, 0,
-              self.held.object3D.position.z
-            );
+            self._haptic(rightCtrl, 0.6, 100);
+            self._spinPivot.set(self.held.object3D.position.x, 0, self.held.object3D.position.z);
             self._spinOffset.set(0, 0, 0);
-            // Immediately start dragging — no trigger press needed
             self.moving = true;
-            laserPivot.object3D.getWorldPosition(self._tickOrigin);
-            self._holdOffset.set(
-              self.held.object3D.position.x - self._tickOrigin.x,
-              0,
-              self.held.object3D.position.z - self._tickOrigin.z
-            );
           }
         });
 
@@ -480,7 +479,9 @@ AFRAME.registerComponent('vr-placer', {
           self.heightY   = 0;
           self.scaleY    = 0;
           // _toolMode intentionally NOT reset — stays active until changed in panel
-          laserPivot.setAttribute('visible', 'false');
+          // Dim laser back to idle (don't hide — always on)
+          if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
+          if (self._landingDot) self._landingDot.setAttribute('visible', 'false');
           self._playerRotLock = null;
           self._playerPosLock = null;
           window._vrPlacerHeld = false;
@@ -512,14 +513,7 @@ AFRAME.registerComponent('vr-placer', {
 
         rightCtrl.addEventListener('triggerdown', function () {
           if (self.gripping && self.held) {
-            // Re-lock hold offset from current position (fine-tune grab point)
-            self.moving = true;
-            laserPivot.object3D.getWorldPosition(self._tickOrigin);
-            self._holdOffset.set(
-              self.held.object3D.position.x - self._tickOrigin.x,
-              0,
-              self.held.object3D.position.z - self._tickOrigin.z
-            );
+            self.moving = true; // trigger re-enables dragging if it was paused
           }
           if (self._btnPts) {
             // Button ray: controller forward direction (NOT the 45°-down laser)
@@ -883,7 +877,8 @@ AFRAME.registerComponent('vr-placer', {
         this.held     = null;
         this._playerRotLock = null;
         this._playerPosLock = null;
-        this.laserPivot.setAttribute('visible', 'false');
+        if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
+        if (this._landingDot) this._landingDot.setAttribute('visible', 'false');
         window._vrPlacerHeld = false;
       }
     }
@@ -897,9 +892,10 @@ AFRAME.registerComponent('vr-placer', {
       this._rigEl.object3D.position.z = this._playerPosLock.z;
     }
 
-    // In visitor mode: hide laser, clear any hover/hold so buildings can't be moved
+    // In visitor mode: dim laser to invisible, clear any hover/hold
     if (window._visitorMode) {
-      if (!this.gripping) this.laserPivot.setAttribute('visible', 'false');
+      if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0; transparent:true');
+      if (this._landingDot) this._landingDot.setAttribute('visible', 'false');
       if (this._lastHovered) {
         if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
         this._lastHovered = null;
@@ -1005,13 +1001,33 @@ AFRAME.registerComponent('vr-placer', {
       }
     }
 
-    if (!this.held) { } else {
+    if (!this.held) {
+      // Hide landing dot when nothing held
+      if (this._landingDot) this._landingDot.setAttribute('visible', 'false');
+    } else {
 
-    // ── Move: offset-locked to controller ────────────────────────────────
+    // ── Move: laser → floor intersection ─────────────────────────────────
+    // Building tracks where the laser beam hits the floor (at building's Y height).
+    // Tilt wrist up = building slides further; tilt down = pulls closer.
     if (this.moving) {
       this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
-      this.held.object3D.position.x = this._tickOrigin.x + this._holdOffset.x;
-      this.held.object3D.position.z = this._tickOrigin.z + this._holdOffset.z;
+      this.laserPivot.object3D.getWorldQuaternion(this.tmpQuat);
+      this._tickDir.set(0, 0, -1).applyQuaternion(this.tmpQuat).normalize();
+      var planeY = this.held.object3D.position.y;
+      if (this._tickDir.y < -0.02) {
+        var _t = (planeY - this._tickOrigin.y) / this._tickDir.y;
+        if (_t > 0.15 && _t < 28) {
+          var _nx = this._tickOrigin.x + this._tickDir.x * _t;
+          var _nz = this._tickOrigin.z + this._tickDir.z * _t;
+          this.held.object3D.position.x = _nx;
+          this.held.object3D.position.z = _nz;
+          // Landing dot follows the intersection point
+          if (this._landingDot) {
+            this._landingDot.object3D.position.set(_nx, planeY + 0.02, _nz);
+            this._landingDot.setAttribute('visible', 'true');
+          }
+        }
+      }
     }
 
     // ── Poll gamepads directly — events miss held positions ───────────────

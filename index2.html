@@ -67,9 +67,11 @@
         if (vBtn) vBtn.setAttribute('material', 'color:#003300; emissive:#00ff44; emissiveIntensity:1; shader:flat');
         if (vLbl) vLbl.setAttribute('value', 'VISITOR');
       } else {
-        // BUILD: laser restored by vr-placer tick, builder speed
+        // BUILD: restore laser to dim-idle opacity
         if (vBtn) vBtn.setAttribute('material', 'color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat');
         if (vLbl) vLbl.setAttribute('value', 'BUILD');
+        var _laser = document.querySelector('[oculus-touch-controls*="right"] a-box');
+        if (_laser) _laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
       }
     };
 
