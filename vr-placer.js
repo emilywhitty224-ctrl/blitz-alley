@@ -326,18 +326,9 @@ AFRAME.registerComponent('vr-placer', {
       });
     };
 
-    // ── Haptic helper ─────────────────────────────────────────────────────
-    self._haptic = function (ctrlEl, intensity, duration) {
-      try {
-        var tc = ctrlEl && (ctrlEl.components['tracked-controls-webxr'] ||
-                            ctrlEl.components['tracked-controls']);
-        var gp = tc && tc.controller && tc.controller.gamepad;
-        if (gp && gp.hapticActuators && gp.hapticActuators.length > 0) {
-          var _p = gp.hapticActuators[0].pulse(intensity, duration);
-          if (_p && _p.catch) _p.catch(function () {}); // prevent unhandled rejection killing WebXR session
-        }
-      } catch (e) {}
-    };
+    // ── Haptic helper — DISABLED ──────────────────────────────────────────
+    // pulse() causes a native-level crash on Quest (below JS, uncatchable).
+    self._haptic = function () {};
 
     this.el.sceneEl.addEventListener('loaded', function () {
       var cam       = document.querySelector('#cam');
