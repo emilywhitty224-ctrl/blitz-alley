@@ -288,8 +288,9 @@ AFRAME.registerComponent('vr-placer', {
     self._camEl       = null;
     self._locoFwd     = new THREE.Vector3();
     self._locoRight   = new THREE.Vector3();
-    self._locoCQ      = new THREE.Quaternion();
-    self._lastHovered = null;
+    self._locoCQ           = new THREE.Quaternion();
+    self._lastHovered      = null;
+    self._triggerGripping  = false;
 
     // ── Hover glow helper — subtle cyan emissive boost, restores on exit ─
     self._setHoverGlow = function (el, on) {
@@ -447,8 +448,8 @@ AFRAME.registerComponent('vr-placer', {
               scale: self.hovered.object3D.scale.x
             });
             self.redoHistory = []; // new action clears redo stack
-            self._setHoverGlow(self.hovered, false); // remove glow — now held
             self._lastHovered = null;
+            if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
             self.held = self.hovered;
             self._haptic(rightCtrl, 0.6, 100); // strong grab buzz
             // Spin pivot = building centre XZ — rotates around its own axis
@@ -512,6 +513,14 @@ AFRAME.registerComponent('vr-placer', {
               0,
               self.held.object3D.position.z - self._tickOrigin.z
             );
+          } else if (!self.gripping && !self.held) {
+            // Trigger-only grab: show laser so auto-grab can fire in tick
+            self._triggerGripping = true;
+            laserPivot.setAttribute('visible', 'true');
+            if (rigEl) {
+              self._playerRotLock = rigEl.object3D.rotation.y;
+              self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
+            }
           }
           if (self._btnPts) {
             // Button ray: controller forward direction (NOT the 45°-down laser)
@@ -528,7 +537,36 @@ AFRAME.registerComponent('vr-placer', {
           }
         });
         rightCtrl.addEventListener('triggerup', function () {
-          // Keep moving = true after triggerup (drag continues from grip)
+          if (self._triggerGripping && !self.gripping) {
+            // Release trigger-grab
+            self._triggerGripping = false;
+            var justReleased = self.held;
+            self.moving   = false;
+            self.held     = null;
+            self.hovered  = null;
+            self._playerRotLock = null;
+            self._playerPosLock = null;
+            laserPivot.setAttribute('visible', 'false');
+            if (justReleased) {
+              self._haptic(rightCtrl, 0.2, 50);
+              requestAnimationFrame(function () {
+                var id  = justReleased.getAttribute('data-name');
+                var box = new THREE.Box3().setFromObject(justReleased.object3D);
+                self.bboxCache[id] = { el: justReleased, box: box, lastPos: justReleased.object3D.position.clone() };
+                self.bboxKeys = Object.keys(self.bboxCache);
+              });
+              try {
+                var layout = {};
+                document.querySelectorAll('.placeable').forEach(function (el) {
+                  var id3 = el.getAttribute('data-name');
+                  var p3  = el.object3D.position;
+                  layout[id3] = { x: p3.x, y: p3.y, z: p3.z, rotY: el.object3D.rotation.y, scale: el.object3D.scale.x };
+                });
+                localStorage.setItem('blitz-layout', JSON.stringify(layout));
+              } catch(e) {}
+            }
+          }
+          // If grip is active, moving continues (drag from grip is not affected by triggerup)
         });
 
         rightCtrl.addEventListener('thumbstickmoved', function (e) {
@@ -853,7 +891,10 @@ AFRAME.registerComponent('vr-placer', {
     // In visitor mode: hide laser, clear any hover/hold so buildings can't be moved
     if (window._visitorMode) {
       if (!this.gripping) this.laserPivot.setAttribute('visible', 'false');
-      if (this._lastHovered) { this._setHoverGlow(this._lastHovered, false); this._lastHovered = null; }
+      if (this._lastHovered) {
+        if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
+        this._lastHovered = null;
+      }
       this.hovered  = null;
       this.held     = null;
       this.gripping = false;
@@ -913,10 +954,43 @@ AFRAME.registerComponent('vr-placer', {
       }
       this.hovered = newHovered;
 
-      // Apply / remove hover glow when hover target changes
+      // Auto-grab: if laser is active and we just swept over a building, grab it
+      if ((this.gripping || this._triggerGripping) && !this.held && this.hovered) {
+        var _agId = this.hovered.getAttribute('data-name');
+        if (!this._lockedBuildings[_agId]) {
+          this.history.push({
+            el:    this.hovered,
+            x:     this.hovered.object3D.position.x,
+            z:     this.hovered.object3D.position.z,
+            rotY:  this.hovered.object3D.rotation.y,
+            scale: this.hovered.object3D.scale.x
+          });
+          this.redoHistory = [];
+          this._lastHovered = null;
+          if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
+          this.held = this.hovered;
+          this._haptic(this._rightCtrlEl, 0.6, 100);
+          this._spinPivot.set(this.held.object3D.position.x, 0, this.held.object3D.position.z);
+          this._spinOffset.set(0, 0, 0);
+          this.moving = true;
+          this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
+          this._holdOffset.set(
+            this.held.object3D.position.x - this._tickOrigin.x,
+            0,
+            this.held.object3D.position.z - this._tickOrigin.z
+          );
+        }
+      }
+
+      // Laser turns orange when locked onto a building, cyan when free
       if (this.hovered !== this._lastHovered) {
-        if (this._lastHovered) this._setHoverGlow(this._lastHovered, false);
-        if (this.hovered)      this._setHoverGlow(this.hovered, true);
+        if (this.laser) {
+          if (this.hovered) {
+            this.laser.setAttribute('material', 'color:#ff8800; emissive:#ff8800; emissiveIntensity:1; shader:flat; opacity:0.85; transparent:true');
+          } else {
+            this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
+          }
+        }
         this._lastHovered = this.hovered;
       }
     }
