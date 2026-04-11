@@ -884,6 +884,7 @@ AFRAME.registerComponent('vr-placer', {
         this._playerRotLock = null;
         this._playerPosLock = null;
         this.laserPivot.setAttribute('visible', 'false');
+        window._vrPlacerHeld = false;
       }
     }
 
@@ -907,6 +908,7 @@ AFRAME.registerComponent('vr-placer', {
       this.held     = null;
       this.gripping = false;
       this.moving   = false;
+      window._vrPlacerHeld = false;
     }
 
     // Rolling bbox refresh — 1 building per frame to keep hover accurate
@@ -1551,14 +1553,16 @@ AFRAME.registerComponent('radial-menu', {
     this._ghostEl.setAttribute('scale', item.scale + ' ' + item.scale + ' ' + item.scale);
     this._ghostEl.setAttribute('visible', 'true');
     // Make semi-transparent after the model finishes loading
-    this._ghostEl.addEventListener('model-loaded', function _onLoad() {
-      this._ghostEl.removeEventListener('model-loaded', _onLoad);
-      this._ghostEl.object3D.traverse(function (o) {
+    var _ghostRef = this._ghostEl;
+    var _onLoad = function () {
+      _ghostRef.removeEventListener('model-loaded', _onLoad);
+      _ghostRef.object3D.traverse(function (o) {
         if (!o.isMesh || !o.material) return;
         var mats = Array.isArray(o.material) ? o.material : [o.material];
         mats.forEach(function (m) { m.transparent = true; m.opacity = 0.38; });
       });
-    }.bind(this));
+    };
+    this._ghostEl.addEventListener('model-loaded', _onLoad);
   },
 
   _hideGhost: function () {
@@ -1678,6 +1682,7 @@ AFRAME.registerComponent('control-panel', {
       return;
     }
 
+    this._close(); // close panel first so it doesn't overlap help or readout
     if (item.fn) {
       var placer = this.el.sceneEl.components['vr-placer'];
       var msg = item.fn(placer);
@@ -1687,7 +1692,6 @@ AFRAME.registerComponent('control-panel', {
         placer.readoutTimer = 90;
       }
     }
-    this._close();
   },
 
   tick: function () {
