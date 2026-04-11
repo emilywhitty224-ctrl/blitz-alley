@@ -331,7 +331,8 @@ AFRAME.registerComponent('vr-placer', {
                             ctrlEl.components['tracked-controls']);
         var gp = tc && tc.controller && tc.controller.gamepad;
         if (gp && gp.hapticActuators && gp.hapticActuators.length > 0) {
-          gp.hapticActuators[0].pulse(intensity, duration);
+          var _p = gp.hapticActuators[0].pulse(intensity, duration);
+          if (_p && _p.catch) _p.catch(function () {}); // prevent unhandled rejection killing WebXR session
         }
       } catch (e) {}
     };
@@ -447,31 +448,33 @@ AFRAME.registerComponent('vr-placer', {
       // ── Right controller ─────────────────────────────────────────────────
       if (rightCtrl) {
         rightCtrl.addEventListener('gripdown', function () {
-          self.gripping = true;
-          // Brighten laser on grip
-          if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.65; transparent:true');
-          if (rigEl) {
-            self._playerRotLock = rigEl.object3D.rotation.y;
-            self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
-          }
-          if (self.hovered) {
-            self.history.push({
-              el:    self.hovered,
-              x:     self.hovered.object3D.position.x,
-              z:     self.hovered.object3D.position.z,
-              rotY:  self.hovered.object3D.rotation.y,
-              scale: self.hovered.object3D.scale.x
-            });
-            self.redoHistory = [];
-            self._lastHovered = null;
-            self.held = self.hovered;
-            window._vrPlacerHeld = true;
-            self._haptic(rightCtrl, 0.6, 100);
-            self._spinPivot.set(self.held.object3D.position.x, 0, self.held.object3D.position.z);
-            self._spinOffset.set(0, 0, 0);
-            self.moving = true;
-            self._slowTracked = false; // reset slow-mode delta tracking
-          }
+          try {
+            self.gripping = true;
+            // Brighten laser on grip
+            if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.65; transparent:true');
+            if (rigEl) {
+              self._playerRotLock = rigEl.object3D.rotation.y;
+              self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
+            }
+            if (self.hovered) {
+              self.history.push({
+                el:    self.hovered,
+                x:     self.hovered.object3D.position.x,
+                z:     self.hovered.object3D.position.z,
+                rotY:  self.hovered.object3D.rotation.y,
+                scale: self.hovered.object3D.scale.x
+              });
+              self.redoHistory = [];
+              self._lastHovered = null;
+              self.held = self.hovered;
+              window._vrPlacerHeld = true;
+              self._haptic(rightCtrl, 0.6, 100);
+              self._spinPivot.set(self.held.object3D.position.x, 0, self.held.object3D.position.z);
+              self._spinOffset.set(0, 0, 0);
+              self.moving = true;
+              self._slowTracked = false;
+            }
+          } catch (e) { console.error('gripdown error:', e); }
         });
 
         rightCtrl.addEventListener('gripup', function () {
@@ -914,15 +917,18 @@ AFRAME.registerComponent('vr-placer', {
     }
 
     // Rolling bbox refresh — 1 building per frame to keep hover accurate
+    // Runs inside try/catch (setFromObject can throw on malformed GLB geometry)
     if (!this.gripping && this.bboxKeys.length > 0) {
-      var rbIdx   = this.frameCount % this.bboxKeys.length;
-      var rbKey   = this.bboxKeys[rbIdx];
-      var rbEntry = this.bboxCache[rbKey];
-      if (rbEntry && rbEntry.el) {
-        var newBox = new THREE.Box3().setFromObject(rbEntry.el.object3D);
-        rbEntry.box = newBox;
-        rbEntry.lastPos.copy(rbEntry.el.object3D.position);
-      }
+      try {
+        var rbIdx   = this.frameCount % this.bboxKeys.length;
+        var rbKey   = this.bboxKeys[rbIdx];
+        var rbEntry = this.bboxCache[rbKey];
+        if (rbEntry && rbEntry.el) {
+          this._tmpBox.setFromObject(rbEntry.el.object3D); // reuse pre-allocated box
+          rbEntry.box.copy(this._tmpBox);
+          rbEntry.lastPos.copy(rbEntry.el.object3D.position);
+        }
+      } catch (e) {}
     }
 
     // Lock pending countdown
