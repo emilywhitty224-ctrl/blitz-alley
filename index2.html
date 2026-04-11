@@ -87,6 +87,28 @@
       var vBtn2 = document.querySelector('#visitor-btn');
       if (vBtn2) vBtn2.addEventListener('click', window.toggleVisitorMode);
 
+      // ── Loading progress counter ─────────────────────────────────────────
+      var _loadingEl = document.querySelector('#loading-counter');
+      var _loadTotal = 13;
+      var _loadDone  = 0;
+      if (_loadingEl) {
+        _loadingEl.setAttribute('value', 'Loading 0 / ' + _loadTotal + '…');
+        document.querySelectorAll('[data-name$="-0"]').forEach(function (el) {
+          el.addEventListener('model-loaded', function () {
+            _loadDone++;
+            if (_loadDone >= _loadTotal) {
+              _loadingEl.setAttribute('value', 'All loaded ✓');
+              setTimeout(function () {
+                var p = _loadingEl.parentNode;
+                if (p) p.setAttribute('visible', 'false');
+              }, 2500);
+            } else {
+              _loadingEl.setAttribute('value', 'Loading ' + _loadDone + ' / ' + _loadTotal + '…');
+            }
+          });
+        });
+      }
+
       // Reset map — two-gaze confirmation
       var resetBtn  = document.querySelector('#reset-btn');
       var resetLbl  = document.querySelector('#reset-lbl');
@@ -322,6 +344,31 @@
           color="#00ffaa" width="2.0" align="center"
           material="shader:flat; emissive:#00ffaa; emissiveIntensity:0.6; opacity:0.55; transparent:true">
   </a-text>
+
+  <!-- ── Loading counter — shows above spawn while GLBs load, hides when done ── -->
+  <a-entity position="0 2.3 -34" id="loading-counter-wrapper">
+    <a-text id="loading-counter" value="Loading…" align="center"
+            color="#ffee88" width="4"
+            material="shader:flat; emissive:#ffee88; emissiveIntensity:0.5; opacity:0.85; transparent:true">
+    </a-text>
+  </a-entity>
+
+  <!-- ── Scale reference person — 1.75 m silhouette, grab and place next to buildings ── -->
+  <a-entity class="placeable" data-name="scale-ref" position="1.5 0 -34">
+    <!-- body -->
+    <a-box width="0.45" height="0.9" depth="0.25" position="0 0.45 0"
+           material="color:#ccddff; opacity:0.45; transparent:true; shader:flat;
+                     emissive:#8899cc; emissiveIntensity:0.6; side:double"></a-box>
+    <!-- head -->
+    <a-box width="0.25" height="0.28" depth="0.22" position="0 1.175 0"
+           material="color:#ccddff; opacity:0.45; transparent:true; shader:flat;
+                     emissive:#8899cc; emissiveIntensity:0.6; side:double"></a-box>
+    <!-- height label -->
+    <a-text value="1.75 m" position="0 1.9 0" align="center"
+            color="#aabbff" width="2.5"
+            material="shader:flat; emissive:#aabbff; emissiveIntensity:0.7; opacity:0.8; transparent:true">
+    </a-text>
+  </a-entity>
 
   <!-- ── Controls card — grabbable, starts on the wall to the left of spawn ── -->
   <!-- Grab with right grip laser like any building. Hold it up to read. -->

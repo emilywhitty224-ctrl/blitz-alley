@@ -289,6 +289,47 @@ AFRAME.registerComponent('vr-placer', {
     self._locoFwd     = new THREE.Vector3();
     self._locoRight   = new THREE.Vector3();
     self._locoCQ      = new THREE.Quaternion();
+    self._lastHovered = null;
+
+    // ── Hover glow helper — subtle cyan emissive boost, restores on exit ─
+    self._setHoverGlow = function (el, on) {
+      if (!el || !el.object3D) return;
+      el.object3D.traverse(function (o) {
+        if (!o.isMesh || !o.material) return;
+        var mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(function (mat) {
+          if (on) {
+            if (!mat._hoverOrigEmissive) {
+              mat._hoverOrigEmissive = mat.emissive
+                ? mat.emissive.clone() : new THREE.Color(0, 0, 0);
+              mat._hoverOrigEmissiveIntensity = mat.emissiveIntensity != null
+                ? mat.emissiveIntensity : 0;
+            }
+            mat.emissive.set(0.05, 0.25, 0.35);  // subtle cyan, won't wash out the model
+            mat.emissiveIntensity = 0.45;
+          } else {
+            if (mat._hoverOrigEmissive) {
+              mat.emissive.copy(mat._hoverOrigEmissive);
+              mat.emissiveIntensity = mat._hoverOrigEmissiveIntensity;
+              delete mat._hoverOrigEmissive;
+              delete mat._hoverOrigEmissiveIntensity;
+            }
+          }
+        });
+      });
+    };
+
+    // ── Haptic helper ─────────────────────────────────────────────────────
+    self._haptic = function (ctrlEl, intensity, duration) {
+      try {
+        var tc = ctrlEl && (ctrlEl.components['tracked-controls-webxr'] ||
+                            ctrlEl.components['tracked-controls']);
+        var gp = tc && tc.controller && tc.controller.gamepad;
+        if (gp && gp.hapticActuators && gp.hapticActuators.length > 0) {
+          gp.hapticActuators[0].pulse(intensity, duration);
+        }
+      } catch (e) {}
+    };
 
     this.el.sceneEl.addEventListener('loaded', function () {
       var cam       = document.querySelector('#cam');
@@ -406,7 +447,10 @@ AFRAME.registerComponent('vr-placer', {
               scale: self.hovered.object3D.scale.x
             });
             self.redoHistory = []; // new action clears redo stack
+            self._setHoverGlow(self.hovered, false); // remove glow — now held
+            self._lastHovered = null;
             self.held = self.hovered;
+            self._haptic(rightCtrl, 0.6, 100); // strong grab buzz
             // Spin pivot = building centre XZ — rotates around its own axis
             self._spinPivot.set(
               self.held.object3D.position.x, 0,
@@ -438,6 +482,7 @@ AFRAME.registerComponent('vr-placer', {
           self._playerRotLock = null;
           self._playerPosLock = null;
           if (justReleased) {
+            self._haptic(rightCtrl, 0.2, 50); // soft release buzz
             requestAnimationFrame(function () {
               var id  = justReleased.getAttribute('data-name');
               var box = new THREE.Box3().setFromObject(justReleased.object3D);
@@ -808,10 +853,11 @@ AFRAME.registerComponent('vr-placer', {
     // In visitor mode: hide laser, clear any hover/hold so buildings can't be moved
     if (window._visitorMode) {
       if (!this.gripping) this.laserPivot.setAttribute('visible', 'false');
-      this.hovered = null;
-      this.held    = null;
+      if (this._lastHovered) { this._setHoverGlow(this._lastHovered, false); this._lastHovered = null; }
+      this.hovered  = null;
+      this.held     = null;
       this.gripping = false;
-      this.moving  = false;
+      this.moving   = false;
     }
 
     // Rolling bbox refresh — 1 building per frame to keep hover accurate
@@ -866,6 +912,13 @@ AFRAME.registerComponent('vr-placer', {
         }
       }
       this.hovered = newHovered;
+
+      // Apply / remove hover glow when hover target changes
+      if (this.hovered !== this._lastHovered) {
+        if (this._lastHovered) this._setHoverGlow(this._lastHovered, false);
+        if (this.hovered)      this._setHoverGlow(this.hovered, true);
+        this._lastHovered = this.hovered;
+      }
     }
 
     if (!this.held) { } else {
