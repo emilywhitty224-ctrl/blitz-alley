@@ -285,6 +285,7 @@ AFRAME.registerComponent('vr-placer', {
     self._spinOffset  = new THREE.Vector3();
     self._holdOffset  = new THREE.Vector3();
     self._btnPts      = null;
+    self._btnVec      = new THREE.Vector3(); // pre-allocated for button direction check
     self._nudgeX      = false;
     self._nudgeZ      = false;
     self._tiltMode    = false;
@@ -530,8 +531,9 @@ AFRAME.registerComponent('vr-placer', {
             rightCtrl.object3D.getWorldQuaternion(self.tmpQuat);
             self._tickDir.set(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
             for (var bi = 0; bi < self._btnPts.length; bi++) {
-              var toBtn = new THREE.Vector3().subVectors(self._btnPts[bi].pos, self._tickOrigin).normalize();
-              if (toBtn.dot(self._tickDir) > 0.92) { // ~23° cone — generous for world buttons
+              if (!self._btnPts[bi] || !self._btnPts[bi].pos) continue;
+              self._btnVec.subVectors(self._btnPts[bi].pos, self._tickOrigin).normalize();
+              if (self._btnVec.dot(self._tickDir) > 0.92) { // ~23° cone — generous for world buttons
                 self._btnPts[bi].fn();
                 break;
               }
@@ -1155,7 +1157,7 @@ AFRAME.registerComponent('vr-placer', {
       this._nudgeZ = false;
     }
 
-    var adjusting = this._tiltMode ? false : adjusting;
+    adjusting = this._tiltMode ? false : adjusting;
 
     // ── Live scale readout ────────────────────────────────────────────────
     if (this.readout && adjusting) {
@@ -1278,7 +1280,8 @@ AFRAME.registerComponent('radial-menu', {
     self._lastHighlighted = -1;
     self._ghostEl   = null;  // semi-transparent preview at right controller position
     self._ghostItem = null;  // which item is currently ghosted
-    self._ghostPos  = null;  // {x, z} world position snapped to floor when trigger released
+    self._ghostPos  = { x: 0, z: 0 }; // world position snapped to floor when trigger released
+    self._ghostWp   = new THREE.Vector3(); // pre-allocated — ghost position tracking in tick
 
     this.el.sceneEl.addEventListener('loaded', function () {
       var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
@@ -1544,8 +1547,18 @@ AFRAME.registerComponent('radial-menu', {
   },
 
   tick: function () {
-    if (!this._open || !this._leftCtrlEl) return;
+    if (!this._open) return;
 
+    // ── Ghost position: track to floor below right controller ────────────
+    if (this._ghostEl && this._rightCtrlEl) {
+      this._rightCtrlEl.object3D.getWorldPosition(this._ghostWp);
+      this._ghostEl.object3D.position.set(this._ghostWp.x, 0, this._ghostWp.z);
+      this._ghostPos.x = this._ghostWp.x;
+      this._ghostPos.z = this._ghostWp.z;
+    }
+
+    // ── Highlight detection: left stick direction ─────────────────────────
+    if (!this._leftCtrlEl) return;
     var ltc = this._leftCtrlEl.components['tracked-controls-webxr'] ||
               this._leftCtrlEl.components['tracked-controls'];
     var lgp = ltc && ltc.controller && ltc.controller.gamepad;
@@ -1557,12 +1570,9 @@ AFRAME.registerComponent('radial-menu', {
 
     var newHighlight = -1;
     if (mag > 0.35) {
-      // atan2(stickX, -stickY): 0 = up, goes clockwise — matches our slot layout
       var angle = Math.atan2(sx, -sy) * 180 / Math.PI;
       if (angle < 0) angle += 360;
       newHighlight = Math.round(angle / 45) % 8;
-
-      // Blank slot = treat as no selection
       var items = this._items();
       if (!items[this._page * 8 + newHighlight]) newHighlight = -1;
     }
@@ -1571,7 +1581,7 @@ AFRAME.registerComponent('radial-menu', {
     this._highlighted = newHighlight;
     if (newHighlight >= 0) this._lastHighlighted = newHighlight;
 
-    // Update visual highlight
+    // Update visual highlight on segments
     var items = this._items();
     for (var i = 0; i < 8; i++) {
       var seg  = this._segEls[i];
@@ -1587,12 +1597,11 @@ AFRAME.registerComponent('radial-menu', {
       }
     }
 
-    // Name label above wheel + description below
+    // Name / description labels + ghost preview
     if (this._nameLabel || this._descLabel) {
       var item = newHighlight >= 0 ? items[this._page * 8 + newHighlight] : null;
       if (this._nameLabel) this._nameLabel.setAttribute('text', 'value', item ? item.name : '');
       if (this._descLabel) this._descLabel.setAttribute('text', 'value', item ? (item.desc || '') : '');
-      // Update ghost preview
       this._showGhost(item || null);
     }
   },
@@ -1626,15 +1635,8 @@ AFRAME.registerComponent('radial-menu', {
     }
   },
 
-  tick: function () {
-    if (!this._open || !this._ghostEl || !this._rightCtrlEl) return;
-    // Track ghost to the floor below the right controller
-    var wp = new THREE.Vector3();
-    this._rightCtrlEl.object3D.getWorldPosition(wp);
-    this._ghostEl.object3D.position.set(wp.x, 0, wp.z);
-    this._ghostPos = { x: wp.x, z: wp.z };
-  }
 });
+
 
 
 // ── CONTROL PANEL ─────────────────────────────────────────────────────────────
@@ -1920,8 +1922,6 @@ AFRAME.registerComponent('control-panel', {
       var desc;
       if (!si) {
         desc = 'R-stick: navigate   A: activate   B: close';
-      } else if (si.info) {
-        desc = 'SPAWN:  hold Left Trigger  —  stick to pick item  —  release to place';
       } else if (si.special === 'reset') {
         desc = this._resetPending
           ? 'CONFIRM?  press A again to clear all buildings — cannot be undone'
