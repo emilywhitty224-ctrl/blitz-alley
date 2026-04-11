@@ -477,7 +477,7 @@ AFRAME.registerComponent('vr-placer', {
           self.stickX    = 0;
           self.heightY   = 0;
           self.scaleY    = 0;
-          self._toolMode = 0;
+          // _toolMode intentionally NOT reset — stays active until changed in panel
           laserPivot.setAttribute('visible', 'false');
           self._playerRotLock = null;
           self._playerPosLock = null;
@@ -1334,8 +1334,16 @@ AFRAME.registerComponent('radial-menu', {
     fwd.normalize();
 
     var rigPos = rig.object3D.position;
-    var px = (rigPos.x + fwd.x * 2.5).toFixed(2);
-    var pz = (rigPos.z + fwd.z * 2.5).toFixed(2);
+    // Spiral offset so successive spawns don't stack — steps 2.5 m per slot
+    var _totalSpawned = 0;
+    var _sc = this._spawnCounts;
+    Object.keys(_sc).forEach(function (k) { _totalSpawned += _sc[k]; });
+    var _angle  = _totalSpawned * 2.399; // golden angle in radians
+    var _radius = 1.5 + _totalSpawned * 0.4;
+    var _sx = Math.cos(_angle) * _radius;
+    var _sz = Math.sin(_angle) * _radius;
+    var px = (rigPos.x + fwd.x * 3.0 + _sx).toFixed(2);
+    var pz = (rigPos.z + fwd.z * 3.0 + _sz).toFixed(2);
 
     // Unique name: base + count
     this._spawnCounts[item.id] = (this._spawnCounts[item.id] || 0) + 1;
