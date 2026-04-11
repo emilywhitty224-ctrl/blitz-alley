@@ -10,8 +10,23 @@
   <!-- VR placer tools — all reusable A-Frame components -->
   <script src="vr-placer.js"></script>
 
+  <style>
+    #version-overlay {
+      position: fixed;
+      bottom: 18px;
+      right: 90px;      /* sits just left of A-Frame's Enter VR button */
+      color: #88aacc;
+      font-family: monospace;
+      font-size: 13px;
+      opacity: 0.75;
+      pointer-events: none;
+      z-index: 9999;
+      user-select: none;
+    }
+  </style>
+
   <script>
-    var PLACER_VERSION = 'v1.5';
+    var PLACER_VERSION = 'v1.6';
     // Nuclear safety net — any unhandled Promise rejection kills the Quest WebXR session.
     // This catches everything that slips through individual .catch() guards.
     window.addEventListener('unhandledrejection', function (e) {
@@ -387,6 +402,8 @@ Green: visitor / build"
   </a-entity>
 
 </a-scene>
+
+<div id="version-overlay">v1.6</div>
 
 <script>
   // ── SEQUENTIAL SPAWN — one entity at a time, each waiting for model-loaded ──
