@@ -11,6 +11,23 @@
   <script src="vr-placer.js"></script>
 
   <style>
+    #crash-log {
+      display: none;
+      position: fixed;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a0000;
+      color: #ff6666;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 6px 12px;
+      border: 1px solid #ff3333;
+      border-radius: 4px;
+      z-index: 9999;
+      max-width: 90vw;
+      word-break: break-all;
+    }
     #version-overlay {
       position: fixed;
       bottom: 18px;
@@ -28,8 +45,17 @@
   <script>
     var PLACER_VERSION = 'v1.7';
 
-    // Clear any old crash log from localStorage
-    try { localStorage.removeItem('_vrLastErr'); } catch (_) {}
+    // Show last crash error on reload
+    document.addEventListener('DOMContentLoaded', function () {
+      try {
+        var e = localStorage.getItem('_vrLastErr');
+        if (e) {
+          var d = document.getElementById('crash-log');
+          if (d) { d.textContent = e; d.style.display = 'block'; }
+          localStorage.removeItem('_vrLastErr');
+        }
+      } catch (_) {}
+    });
 
     // Catch all JS errors and persist them so they survive a session crash.
     window.onerror = function (msg, src, line) {
@@ -415,6 +441,7 @@ Green: visitor / build"
 
 </a-scene>
 
+<div id="crash-log"></div>
 <div id="version-overlay">v1.7</div>
 
 <script>
