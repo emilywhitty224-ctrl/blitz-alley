@@ -9,6 +9,7 @@
 
   <!-- Draco decoder — needed to parse Draco-compressed GLB files. -->
   <script>
+    var PLACER_VERSION = 'v1.0';
     AFRAME.registerComponent('draco-loader', {
       init: function () {
         var dracoLoader = new THREE.DRACOLoader();
@@ -571,11 +572,16 @@
             leftCtrl.addEventListener('gripdown', function () {
               self.leftGripping = true;
               self.leftLaserPivot.setAttribute('visible', 'true');
+              // Lock rig XZ so left stick Y can't walk the player while adjusting height
+              if (rigEl && !self._playerPosLock) {
+                self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
+              }
             });
             leftCtrl.addEventListener('gripup', function () {
               self.leftGripping = false;
               self.leftHovered  = null;
               self.leftLaserPivot.setAttribute('visible', 'false');
+              if (!self.gripping) self._playerPosLock = null;
             });
 
             // Left X — stamp improved reference post  OR  reset held building
@@ -838,6 +844,19 @@
           this._rigEl.object3D.position.x = this._playerPosLock.x;
           this._rigEl.object3D.position.z = this._playerPosLock.z;
         }
+        // Rolling bbox refresh — 1 building per tick-cycle, keeps hover accurate
+        // without calling setFromObject on all buildings every frame
+        if (!this.gripping && this.bboxKeys.length > 0) {
+          var rbIdx  = this.frameCount % this.bboxKeys.length;
+          var rbKey  = this.bboxKeys[rbIdx];
+          var rbEntry = this.bboxCache[rbKey];
+          if (rbEntry && rbEntry.el) {
+            var newBox = new THREE.Box3().setFromObject(rbEntry.el.object3D);
+            rbEntry.box     = newBox;
+            rbEntry.lastPos.copy(rbEntry.el.object3D.position);
+          }
+        }
+
         // Lock pending confirmation countdown
         if (this._lockPendingTimer > 0) {
           this._lockPendingTimer--;
@@ -893,8 +912,8 @@
             var t = -this._tickOrigin.y / this._tickDir.y;
             if (t > 0.3) {
               this.groundPt.copy(this._tickOrigin).addScaledVector(this._tickDir, t);
-              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.035;
-              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.035;
+              this.held.object3D.position.x += (this.groundPt.x - this.held.object3D.position.x) * 0.012;
+              this.held.object3D.position.z += (this.groundPt.z - this.held.object3D.position.z) * 0.012;
             }
           }
         }
@@ -1017,6 +1036,10 @@
 
     // Wire up buttons (gaze fuse fires 'click')
     document.addEventListener('DOMContentLoaded', function () {
+      // Set version label on night button post
+      var vLabel = document.querySelector('#version-label');
+      if (vLabel) vLabel.setAttribute('value', PLACER_VERSION);
+
       // Night toggle
       var nightBtn = document.querySelector('#night-btn');
       if (nightBtn) nightBtn.addEventListener('click', window.toggleNight);
@@ -1096,7 +1119,13 @@
     <a-asset-item id="factory-glb"          src="victorian_factory.glb"></a-asset-item>
     <a-asset-item id="derelict-factory-glb" src="low_poly_derelict_factory.glb"></a-asset-item>
     <a-asset-item id="victorian-pack-glb"   src="modular_victorian_asset_pack.glb"></a-asset-item>
-    <a-asset-item id="brick-wall-glb"       src="low_mixed_dark_bricks_wall.glb"></a-asset-item>
+    <a-asset-item id="brick-wall-glb"          src="low_mixed_dark_bricks_wall.glb"></a-asset-item>
+    <a-asset-item id="rubble-glb"              src="construction_rubble.glb"></a-asset-item>
+    <a-asset-item id="old-lamp-glb"            src="old_street_lamp.glb"></a-asset-item>
+    <a-asset-item id="antique-shop-glb"        src="antique_shop_compressed.glb"></a-asset-item>
+    <a-asset-item id="victorian-fence-glb"     src="victorian_fence_c.glb"></a-asset-item>
+    <a-asset-item id="victorian-street-glb"    src="victorian_street_scene_c.glb"></a-asset-item>
+    <a-asset-item id="gunnersbury-arch-glb"    src="gunnersbury_arch.glb"></a-asset-item>
   </a-assets>
 
   <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
@@ -1121,10 +1150,12 @@
            width="0.4" height="0.22" depth="0.14" position="0 1.15 0"
            material="color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat">
     </a-box>
-    <a-text value="DAY / NIGHT" position="0 1.4 0" align="center"
+    <a-text id="night-label" value="DAY / NIGHT" position="0 1.42 0" align="center"
             color="#88ccff" width="2.5" material="shader:flat"></a-text>
-    <a-text value="(look 1.5s)" position="0 1.02 0" align="center"
-            color="#445566" width="2" material="shader:flat"></a-text>
+    <a-text value="(look 1.5s)" position="0 1.27 0" align="center"
+            color="#445566" width="1.8" material="shader:flat"></a-text>
+    <a-text id="version-label" value="" position="0 1.12 0" align="center"
+            color="#334455" width="1.6" material="shader:flat"></a-text>
   </a-entity>
 
   <!-- ═══ RESET MAP button — two-step confirmation ═══ -->
@@ -1163,12 +1194,29 @@
   <a-box position="3.5 0.02 -33"  rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
   <a-box position="-3.5 0.02 -33" rotation="-90 0 90"  width="0.08" height="0.5" depth="0.02" material="color:#aaaaff; shader:flat"></a-box>
 
-  <!-- ── Controls board — small, flat on the ground beside the ring ── -->
-  <a-plane position="2.2 0.02 -33" rotation="-90 0 0" width="2.2" height="2.8"
-           material="color:#000a06; opacity:0.85; transparent:true; shader:flat"></a-plane>
-  <a-text value="── RIGHT HAND ──&#10;GRIP          laser on / select&#10;+ TRIGGER     move building&#10;STICK L/R     spin&#10;STICK U/D     scale (up=big)&#10;STICK CLICK   clone&#10;A             snap to floor&#10;B             fly&#10;&#10;── LEFT HAND ──&#10;GRIP          laser on / raise-lower&#10;STICK U/D     raise / lower height&#10;STICK CLICK   undo&#10;X             reference post&#10;X + R.GRIP    reset building&#10;Y             save + export&#10;&#10;── WORLD ──&#10;DAY/NIGHT btn gaze 1.5s"
-          position="2.2 0.03 -33" rotation="-90 0 -0"
-          color="#aaffdd" width="2.0" align="left" wrap-count="28"
+  <!-- ── Controls board — flat on the ground beside the compass ring ── -->
+  <a-plane position="2.8 0.02 -33" rotation="-90 0 0" width="3.6" height="4.0"
+           material="color:#000d08; opacity:0.9; transparent:true; shader:flat"></a-plane>
+
+  <a-text value="RIGHT HAND" position="2.8 0.03 -31.2" rotation="-90 0 0"
+          color="#44ffaa" width="3.2" align="center" material="shader:flat"></a-text>
+  <a-text value="GRIP alone         Point laser at building&#10;GRIP + TRIGGER  Drag building (slow)&#10;STICK left/right   Spin around aim point&#10;STICK up/down      Scale up / scale down&#10;STICK CLICK        Clone building&#10;A button           Snap to floor&#10;A button (x2)      Lock / unlock building&#10;B button           Toggle fly mode"
+          position="1.15 0.03 -31.5" rotation="-90 0 0"
+          color="#ccffee" width="3.2" align="left" wrap-count="36"
+          material="shader:flat"></a-text>
+
+  <a-text value="LEFT HAND" position="2.8 0.03 -33.5" rotation="-90 0 0"
+          color="#ffcc44" width="3.2" align="center" material="shader:flat"></a-text>
+  <a-text value="GRIP alone         Point laser at building&#10;GRIP + STICK U/D   Raise / lower height&#10;STICK CLICK        Undo last move&#10;X button           Stamp reference pole&#10;X + Right GRIP     Reset building position&#10;Y button           Export positions"
+          position="1.15 0.03 -33.8" rotation="-90 0 0"
+          color="#ffeecc" width="3.2" align="left" wrap-count="36"
+          material="shader:flat"></a-text>
+
+  <a-text value="WORLD BUTTONS" position="2.8 0.03 -35.4" rotation="-90 0 0"
+          color="#aaaaff" width="3.2" align="center" material="shader:flat"></a-text>
+  <a-text value="DAY/NIGHT post     Gaze at button 1.5s&#10;RESET MAP post     Gaze, then gaze again"
+          position="1.15 0.03 -35.7" rotation="-90 0 0"
+          color="#ddddff" width="3.2" align="left" wrap-count="36"
           material="shader:flat"></a-text>
 
   <!-- ═══ BUILDINGS — drag with right grip to place, Y button to export ═══ -->
@@ -1208,7 +1256,37 @@
     position="120 0 -45" rotation="0 0 0" scale="1 1 1">
   </a-entity>
 
-  <!-- fence + antique shop removed — too large, cause Quest memory issues -->
+  <a-entity class="placeable" data-name="rubble" id="b-rubble"
+    gltf-model="#rubble-glb"
+    position="140 0 -45" rotation="0 0 0" scale="1 1 1">
+  </a-entity>
+
+  <a-entity class="placeable" data-name="old-lamp" id="b-old-lamp"
+    gltf-model="#old-lamp-glb"
+    position="160 0 -45" rotation="0 0 0" scale="1 1 1">
+  </a-entity>
+
+  <a-entity class="placeable" data-name="antique-shop" id="b-antique-shop"
+    gltf-model="#antique-shop-glb"
+    position="180 0 -45" rotation="0 0 0" scale="1 1 1">
+  </a-entity>
+
+  <a-entity class="placeable" data-name="victorian-fence" id="b-victorian-fence"
+    gltf-model="#victorian-fence-glb"
+    position="200 0 -45" rotation="0 0 0" scale="1 1 1">
+  </a-entity>
+
+  <a-entity class="placeable" data-name="victorian-street" id="b-victorian-street"
+    gltf-model="#victorian-street-glb"
+    position="220 0 -45" rotation="0 0 0" scale="1 1 1">
+  </a-entity>
+
+  <a-entity class="placeable" data-name="gunnersbury-arch" id="b-gunnersbury-arch"
+    gltf-model="#gunnersbury-arch-glb"
+    position="240 0 -45" rotation="0 0 0" scale="1 1 1">
+  </a-entity>
+
+  <!-- All assets now compressed and added above -->
   </a-entity>
 
   <!-- ═══ PLAYER ═══
