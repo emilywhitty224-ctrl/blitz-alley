@@ -660,17 +660,21 @@ AFRAME.registerComponent('vr-placer', {
         });
 
         leftCtrl.addEventListener('gripdown', function () {
-          self.leftGripping = true;
-          self.leftLaserPivot.setAttribute('visible', 'true');
-          if (rigEl && !self._playerPosLock) {
-            self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
-          }
+          try {
+            self.leftGripping = true;
+            if (self.leftLaserPivot) self.leftLaserPivot.setAttribute('visible', 'true');
+            if (rigEl && !self._playerPosLock) {
+              self._playerPosLock = { x: rigEl.object3D.position.x, z: rigEl.object3D.position.z };
+            }
+          } catch (e) { console.error('left gripdown:', e); }
         });
         leftCtrl.addEventListener('gripup', function () {
-          self.leftGripping = false;
-          self.leftHovered  = null;
-          self.leftLaserPivot.setAttribute('visible', 'false');
-          if (!self.gripping) self._playerPosLock = null;
+          try {
+            self.leftGripping = false;
+            self.leftHovered  = null;
+            if (self.leftLaserPivot) self.leftLaserPivot.setAttribute('visible', 'false');
+            if (!self.gripping) self._playerPosLock = null;
+          } catch (e) { console.error('left gripup:', e); }
         });
 
         // X — delete moved to control panel DELETE button to prevent accidental deletion
@@ -1273,7 +1277,23 @@ AFRAME.registerComponent('vr-placer', {
       }
     }
 
-    } catch (e) { console.error('vr-placer tick error:', e); }
+    } catch (e) {
+      // Rate-limit identical errors — without this, a repeating tick error fires
+      // 90 times/second and eventually kills the browser tab.
+      var _em = e && (e.message || String(e));
+      if (_em !== this._lastTickErr) {
+        this._lastTickErr = _em;
+        console.error('vr-placer tick:', e);
+        // Persist to localStorage so the error survives a session crash
+        try { localStorage.setItem('_vrLastErr', _em + ' @' + new Date().toISOString()); } catch (_) {}
+      }
+      // Reset grip state so the error can't repeat every frame
+      this.held     = null;
+      this.moving   = false;
+      this.gripping = false;
+      this._slowTracked    = false;
+      window._vrPlacerHeld = false;
+    }
   }
 });
 
