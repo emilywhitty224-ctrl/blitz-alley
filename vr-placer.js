@@ -276,7 +276,8 @@ AFRAME.registerComponent('vr-placer', {
     self._slowCtrlPos = new THREE.Vector3(); // slow-mode: current controller world pos
     self._slowLastPos = new THREE.Vector3(); // slow-mode: previous frame pos
     self._slowTracked = false;               // slow-mode: true once first valid pos captured
-    self._dotVisible  = false;               // track landing dot visibility to avoid redundant setAttribute
+    self._dotVisible       = false; // track landing dot visibility to avoid redundant setAttribute
+    self._visitorLaserHidden = false; // track visitor-mode laser opacity so we only set it once
     self._leftOrigin  = new THREE.Vector3();
     self._leftDir     = new THREE.Vector3();
     self._leftDist    = new THREE.Vector3();
@@ -663,7 +664,9 @@ AFRAME.registerComponent('vr-placer', {
             self.gripping = false;
             self.moving   = false;
             window._vrPlacerHeld = false;
-            laserPivot.setAttribute('visible', 'false');
+            if (self.laser) self.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
+            if (self._landingDot && self._dotVisible) { self._landingDot.setAttribute('visible', 'false'); self._dotVisible = false; }
+            self._slowTracked = false;
             self._playerRotLock = null;
             self._playerPosLock = null;
           }
@@ -905,17 +908,24 @@ AFRAME.registerComponent('vr-placer', {
 
     // In visitor mode: dim laser to invisible, clear any hover/hold
     if (window._visitorMode) {
-      if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0; transparent:true');
-      if (this._landingDot && this._dotVisible) { this._landingDot.setAttribute('visible', 'false'); this._dotVisible = false; }
-      if (this._lastHovered) {
-        if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
-        this._lastHovered = null;
+      if (this.laser && !this._visitorLaserHidden) {
+        this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0; transparent:true');
+        this._visitorLaserHidden = true;
       }
+      if (this._landingDot && this._dotVisible) { this._landingDot.setAttribute('visible', 'false'); this._dotVisible = false; }
+      this._lastHovered = null;
       this.hovered  = null;
       this.held     = null;
       this.gripping = false;
       this.moving   = false;
+      this._slowTracked = false;
       window._vrPlacerHeld = false;
+    } else {
+      // Leaving visitor mode — restore laser to idle opacity (once)
+      if (this._visitorLaserHidden) {
+        if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
+        this._visitorLaserHidden = false;
+      }
     }
 
     // Rolling bbox refresh — 1 building per frame to keep hover accurate
@@ -987,8 +997,9 @@ AFRAME.registerComponent('vr-placer', {
           });
           this.redoHistory = [];
           this._lastHovered = null;
-          if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
+          if (this.laser) this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.65; transparent:true');
           this.held = this.hovered;
+          window._vrPlacerHeld = true; // block radial wheel while auto-grabbed
           this._haptic(this._rightCtrlEl, 0.6, 100);
           this._spinPivot.set(this.held.object3D.position.x, 0, this.held.object3D.position.z);
           this._spinOffset.set(0, 0, 0);
@@ -1009,7 +1020,7 @@ AFRAME.registerComponent('vr-placer', {
           if (this.hovered) {
             this.laser.setAttribute('material', 'color:#ff8800; emissive:#ff8800; emissiveIntensity:1; shader:flat; opacity:0.85; transparent:true');
           } else {
-            this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.6; transparent:true');
+            this.laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
           }
         }
         this._lastHovered = this.hovered;
