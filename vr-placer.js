@@ -546,6 +546,11 @@ AFRAME.registerComponent('vr-placer', {
 
         // A button — floor snap, or snap to level in tilt mode
         rightCtrl.addEventListener('abuttondown', function () {
+          // Help panel takes highest priority — A closes it
+          if (window._helpPanelIsOpen) {
+            if (window._closeHelpPanel) window._closeHelpPanel();
+            return;
+          }
           // Control panel takes priority when open
           if (window._controlPanelOpen) {
             if (window._cpActivate) window._cpActivate();
@@ -1601,7 +1606,7 @@ var _CP_ITEMS = [
   { id:'reset',   label:'RESET',   sub:'clear all',     special:'reset', fn:null },
   { id:'spawn',   label:'SPAWN',   sub:'L-trig: hold',  info:true, fn:null },
   { id:'grid',    label:'GRID',    sub:'0.5 m snap',    fn:function(){ window._gridSnap = !window._gridSnap; return window._gridSnap ? 'Grid snap  ON' : 'Grid snap  OFF'; } },
-  null
+  { id:'help',    label:'HELP',    sub:'controls guide', fn:function(){ if (window._openHelpPanel) window._openHelpPanel(); return ''; } }
 ];
 
 window._controlPanelOpen = false;
@@ -1867,6 +1872,230 @@ AFRAME.registerComponent('control-panel', {
         desc = si.label + ':  ' + (si.sub || '') + '   —   R-stick navigate  A activate  B close';
       }
       this._descEl.setAttribute('text', 'value', desc);
+    }
+  }
+});
+
+// ── HELP PANEL ───────────────────────────────────────────────────────────────
+// Camera-space overlay, one topic per page, white background, dark text.
+// Open: B → HELP in control panel.   Close: A button.   Navigate: right stick ←→
+//
+window._helpPanelIsOpen = false;
+window._openHelpPanel   = null; // set by component init
+window._closeHelpPanel  = null;
+
+AFRAME.registerComponent('help-panel', {
+  init: function () {
+    var self = this;
+    self._open      = false;
+    self._page      = 0;
+    self._panelEl   = null;
+    self._titleEl   = null;
+    self._bodyEl    = null;
+    self._pageEl    = null;
+    self._navLocked = false;
+
+    var _PAGES = [
+      {
+        title: 'GRABBING  (right hand)',
+        body:  [
+          'Hold  RIGHT GRIP',
+          'Sweep laser onto any building',
+          'It snaps into your hand',
+          ' ',
+          'Laser is CYAN  =  no target',
+          'Laser is ORANGE  =  locked on',
+          ' ',
+          'Release GRIP to drop'
+        ]
+      },
+      {
+        title: 'MOVING & ROTATING',
+        body:  [
+          'WHILE HOLDING a building:',
+          ' ',
+          'Right stick  LEFT / RIGHT',
+          '  →  Rotate around centre',
+          ' ',
+          'Right stick  UP / DOWN',
+          '  →  Scale up / down',
+          ' ',
+          'Right stick CLICK',
+          '  →  Reset to original size'
+        ]
+      },
+      {
+        title: 'HEIGHT & TILT',
+        body:  [
+          'RAISE / LOWER:',
+          'Hold LEFT GRIP',
+          'Left stick  UP / DOWN',
+          '  moves building on Y axis',
+          ' ',
+          'TILT / LEAN:',
+          'Hold building  +  hold LEFT TRIGGER',
+          'Stick X / Y  leans the building',
+          ' ',
+          'A button  =  snap level  /  floor'
+        ]
+      },
+      {
+        title: 'SPAWNING A BUILDING',
+        body:  [
+          'Hold LEFT TRIGGER',
+          '  →  Spawn wheel opens',
+          ' ',
+          'Move left stick to pick a building',
+          ' ',
+          'Point your RIGHT HAND at the',
+          'floor where you want it',
+          ' ',
+          'A ghost preview appears',
+          ' ',
+          'Release LEFT TRIGGER to place'
+        ]
+      },
+      {
+        title: 'BUTTONS & PANEL',
+        body:  [
+          'B button  →  Control Panel',
+          '  Navigate with right stick',
+          '  A button to activate',
+          ' ',
+          'X button  →  Delete building',
+          '  (point at it or hold it)',
+          ' ',
+          'Y button  →  Copy layout',
+          '  to clipboard',
+          ' ',
+          'Left stick CLICK  →  Undo'
+        ]
+      }
+    ];
+    self._pages = _PAGES;
+
+    this.el.sceneEl.addEventListener('loaded', function () {
+      var cam = document.querySelector('#cam');
+      if (!cam) return;
+
+      // ── Root panel entity — parented to camera ────────────────────────
+      var panel = document.createElement('a-entity');
+      panel.setAttribute('position', '0 0.02 -1.05');
+      panel.setAttribute('visible', 'false');
+      cam.appendChild(panel);
+      self._panelEl = panel;
+
+      // ── White background ──────────────────────────────────────────────
+      var bg = document.createElement('a-plane');
+      bg.setAttribute('width',    '0.68');
+      bg.setAttribute('height',   '0.60');
+      bg.setAttribute('material', 'color:#ffffff; shader:flat; side:double');
+      panel.appendChild(bg);
+
+      // ── Thin navy top bar ─────────────────────────────────────────────
+      var topBar = document.createElement('a-plane');
+      topBar.setAttribute('width',    '0.68');
+      topBar.setAttribute('height',   '0.072');
+      topBar.setAttribute('position', '0 0.264 0.001');
+      topBar.setAttribute('material', 'color:#1a2a4a; shader:flat; side:double');
+      panel.appendChild(topBar);
+
+      // ── Title text (white on navy bar) ────────────────────────────────
+      var titleEl = document.createElement('a-text');
+      titleEl.setAttribute('position', '0 0.261 0.003');
+      titleEl.setAttribute('align',    'center');
+      titleEl.setAttribute('baseline', 'center');
+      titleEl.setAttribute('color',    '#ffffff');
+      titleEl.setAttribute('width',    '0.62');
+      titleEl.setAttribute('value',    '');
+      titleEl.setAttribute('material', 'shader:flat');
+      panel.appendChild(titleEl);
+      self._titleEl = titleEl;
+
+      // ── Body text (dark on white) ─────────────────────────────────────
+      var bodyEl = document.createElement('a-text');
+      bodyEl.setAttribute('position',    '-0.31 0.17 0.002');
+      bodyEl.setAttribute('align',       'left');
+      bodyEl.setAttribute('baseline',    'top');
+      bodyEl.setAttribute('color',       '#1a2a4a');
+      bodyEl.setAttribute('width',       '0.60');
+      bodyEl.setAttribute('line-height', '52');
+      bodyEl.setAttribute('value',       '');
+      bodyEl.setAttribute('material',    'shader:flat');
+      panel.appendChild(bodyEl);
+      self._bodyEl = bodyEl;
+
+      // ── Bottom strip — page number + nav hint ─────────────────────────
+      var bottomBar = document.createElement('a-plane');
+      bottomBar.setAttribute('width',    '0.68');
+      bottomBar.setAttribute('height',   '0.058');
+      bottomBar.setAttribute('position', '0 -0.271 0.001');
+      bottomBar.setAttribute('material', 'color:#e8eef6; shader:flat; side:double');
+      panel.appendChild(bottomBar);
+
+      var pageEl = document.createElement('a-text');
+      pageEl.setAttribute('position', '-0.30 -0.270 0.003');
+      pageEl.setAttribute('align',    'left');
+      pageEl.setAttribute('baseline', 'center');
+      pageEl.setAttribute('color',    '#556677');
+      pageEl.setAttribute('width',    '0.25');
+      pageEl.setAttribute('value',    '');
+      pageEl.setAttribute('material', 'shader:flat');
+      panel.appendChild(pageEl);
+      self._pageEl = pageEl;
+
+      var navHint = document.createElement('a-text');
+      navHint.setAttribute('position', '0.30 -0.270 0.003');
+      navHint.setAttribute('align',    'right');
+      navHint.setAttribute('baseline', 'center');
+      navHint.setAttribute('color',    '#889aaa');
+      navHint.setAttribute('width',    '0.38');
+      navHint.setAttribute('value',    'stick \u2190\u2192 page   A = close');
+      navHint.setAttribute('material', 'shader:flat');
+      panel.appendChild(navHint);
+
+      // ── Expose globals ────────────────────────────────────────────────
+      window._openHelpPanel = function () {
+        self._page = 0;
+        self._render();
+        self._panelEl.setAttribute('visible', 'true');
+        self._open = true;
+        window._helpPanelIsOpen = true;
+      };
+      window._closeHelpPanel = function () {
+        self._panelEl.setAttribute('visible', 'false');
+        self._open = false;
+        window._helpPanelIsOpen = false;
+      };
+    });
+  },
+
+  _render: function () {
+    var p = this._pages[this._page];
+    if (!p || !this._titleEl) return;
+    this._titleEl.setAttribute('text', 'value', p.title);
+    this._bodyEl.setAttribute('text',  'value', p.body.join('\n'));
+    this._pageEl.setAttribute('text',  'value', (this._page + 1) + ' / ' + this._pages.length);
+  },
+
+  tick: function () {
+    if (!this._open) return;
+    var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+    if (!rightCtrl) return;
+    var tc = rightCtrl.components['tracked-controls-webxr'] ||
+             rightCtrl.components['tracked-controls'];
+    var gp = tc && tc.controller && tc.controller.gamepad;
+    if (!gp) return;
+    var ax = gp.axes[2];
+    if (Math.abs(ax) > 0.55) {
+      if (!this._navLocked) {
+        if (ax > 0) this._page = Math.min(this._page + 1, this._pages.length - 1);
+        else        this._page = Math.max(this._page - 1, 0);
+        this._render();
+        this._navLocked = true;
+      }
+    } else if (Math.abs(ax) < 0.25) {
+      this._navLocked = false;
     }
   }
 });
