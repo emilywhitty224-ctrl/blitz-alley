@@ -15,6 +15,26 @@
   </script>
 
   <script>
+    // ── RADIAL MENU ITEMS — left trigger hold to open wheel, stick to pick ──
+    // id: used for naming spawned copies (gatehouse-1, gatehouse-2, …)
+    // src: <a-asset-item> id in the scene
+    // scale: same scale used by the staged entity
+    window._radialMenuItems = [
+      { id: 'gatehouse',       name: 'GATEHOUSE',   src: '#gatehouse-glb',         scale: 0.232 },
+      { id: 'blackfriar',      name: 'BLACKFRIAR',  src: '#blackfriar-glb',        scale: 0.694 },
+      { id: 'princelet',       name: 'PRINCELET',   src: '#princelet-glb',         scale: 1.404 },
+      { id: 'factory',         name: 'FACTORY',     src: '#factory-glb',           scale: 0.771 },
+      { id: 'derelict-fac',    name: 'DERELICT',    src: '#derelict-factory-glb',  scale: 1.0   },
+      { id: 'vic-pack',        name: 'VIC.PACK',    src: '#victorian-pack-glb',    scale: 1.0   },
+      { id: 'brick-wall',      name: 'WALL',        src: '#brick-wall-glb',        scale: 1.0   },
+      { id: 'rubble',          name: 'RUBBLE',      src: '#rubble-glb',            scale: 1.0   },
+      { id: 'old-lamp',        name: 'LAMP',        src: '#old-lamp-glb',          scale: 1.0   },
+      { id: 'antique-shop',    name: 'ANTIQUE',     src: '#antique-shop-glb',      scale: 1.0   },
+      { id: 'vic-fence',       name: 'FENCE',       src: '#victorian-fence-glb',   scale: 1.0   },
+      { id: 'vic-street',      name: 'STREET',      src: '#victorian-street-glb',  scale: 1.0   },
+      { id: 'arch',            name: 'ARCH',        src: '#gunnersbury-arch-glb',  scale: 1.0   }
+    ];
+
     // Shared day/night toggle — called by both the world button and left trigger
     window._nightMode = false;
     window.toggleNight = function () {
@@ -134,6 +154,7 @@
   star-field
   boundary-collider
   vr-placer
+  radial-menu
   fog="type: linear; color: #b0c8e8; near: 60; far: 120"
   renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
   shadow="type: basic"
@@ -263,6 +284,10 @@ R-Stick: tilt building
 A: snap to level
 
 LEFT HAND
+Trigger hold: spawn wheel
+  Stick: pick item
+  Release: spawn it
+  Stick click: next page
 Grip + Stick U/D: height
 Stick click: undo
 X + R.Grip: reset pos

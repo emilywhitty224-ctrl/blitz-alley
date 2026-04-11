@@ -536,6 +536,7 @@ AFRAME.registerComponent('vr-placer', {
         });
 
         leftCtrl.addEventListener('thumbstickdown', function () {
+          if (window._radialMenuOpen) return; // menu open — hand off to radial-menu
           if (self.history.length === 0) return;
           var last = self.history.pop();
           last.el.object3D.position.x  = last.x;
@@ -885,5 +886,291 @@ AFRAME.registerComponent('vr-placer', {
     }
 
     } catch (e) { console.error('vr-placer tick error:', e); }
+  }
+});
+
+// ── RADIAL WHEEL MENU ────────────────────────────────────────────────────────
+// Left trigger HOLD → wheel opens in front of you
+// Left thumbstick direction → highlights a segment (8 items per page)
+// Left thumbstick CLICK (while open) → cycle to next page
+// Release left trigger → spawns highlighted item 2.5m ahead + closes wheel
+//
+// Configure items via: window._radialMenuItems = [{ id, name, src, scale }, ...]
+// Add to scene: <a-scene radial-menu ...>
+window._radialMenuOpen = false;
+AFRAME.registerComponent('radial-menu', {
+  init: function () {
+    var self = this;
+    self._open       = false;
+    self._page       = 0;
+    self._highlighted = -1;
+    self._wheelEl    = null;
+    self._segEls     = [];
+    self._labelEls   = [];
+    self._pageLabel  = null;
+    self._nameLabel  = null;
+    self._leftCtrlEl = null;
+    self._spawnCounts = {};
+
+    this.el.sceneEl.addEventListener('loaded', function () {
+      var leftCtrl = document.querySelector('[oculus-touch-controls*="left"]');
+      self._leftCtrlEl = leftCtrl;
+      self._buildWheel();
+
+      if (leftCtrl) {
+        leftCtrl.addEventListener('triggerdown', function () {
+          self._open = true;
+          window._radialMenuOpen = true;
+          if (self._wheelEl) self._wheelEl.setAttribute('visible', 'true');
+          self._highlighted = -1;
+          self._refreshLabels();
+        });
+
+        leftCtrl.addEventListener('triggerup', function () {
+          if (self._highlighted >= 0) {
+            var items = self._items();
+            var item  = items[self._page * 8 + self._highlighted];
+            if (item) self._spawnItem(item);
+          }
+          self._open = false;
+          window._radialMenuOpen = false;
+          self._highlighted = -1;
+          if (self._wheelEl) self._wheelEl.setAttribute('visible', 'false');
+          if (self._nameLabel) self._nameLabel.setAttribute('text', 'value', '');
+        });
+
+        // Thumbstick click while open → cycle page
+        leftCtrl.addEventListener('thumbstickdown', function () {
+          if (!self._open) return;
+          var totalPages = Math.ceil(self._items().length / 8);
+          self._page = (self._page + 1) % totalPages;
+          self._highlighted = -1;
+          self._refreshLabels();
+        });
+      }
+    });
+  },
+
+  _items: function () {
+    return window._radialMenuItems || [];
+  },
+
+  _buildWheel: function () {
+    var cam = document.querySelector('#cam');
+    if (!cam) return;
+
+    var wheel = document.createElement('a-entity');
+    wheel.setAttribute('position', '0 -0.04 -0.58');
+    wheel.setAttribute('visible', 'false');
+    cam.appendChild(wheel);
+    this._wheelEl = wheel;
+
+    var INNER = 0.07, OUTER = 0.22, ARC = 40, GAP = 5;
+    var MID   = (INNER + OUTER) / 2;
+
+    for (var i = 0; i < 8; i++) {
+      // Slot 0 at top (90°), going clockwise (decreasing angle in A-Frame ring)
+      var centreAngle  = 90 - i * 45;
+      var thetaStart   = ((centreAngle - ARC / 2) % 360 + 360) % 360;
+
+      var seg = document.createElement('a-ring');
+      seg.setAttribute('radius-inner', INNER);
+      seg.setAttribute('radius-outer', OUTER);
+      seg.setAttribute('theta-start',  thetaStart);
+      seg.setAttribute('theta-length', ARC);
+      seg.setAttribute('material', 'color:#1a2030; opacity:0.88; transparent:true; shader:flat; side:double');
+      wheel.appendChild(seg);
+      this._segEls.push(seg);
+
+      // Label at midpoint of segment
+      var aRad = centreAngle * Math.PI / 180;
+      var lx   = Math.cos(aRad) * MID;
+      var ly   = Math.sin(aRad) * MID;
+
+      var lbl = document.createElement('a-text');
+      lbl.setAttribute('position', lx + ' ' + ly + ' 0.002');
+      lbl.setAttribute('align', 'center');
+      lbl.setAttribute('baseline', 'center');
+      lbl.setAttribute('color', '#aabbcc');
+      lbl.setAttribute('width', '0.11');
+      lbl.setAttribute('wrap-count', '9');
+      lbl.setAttribute('material', 'shader:flat');
+      lbl.setAttribute('value', '');
+      wheel.appendChild(lbl);
+      this._labelEls.push(lbl);
+    }
+
+    // Centre disc — page indicator
+    var centre = document.createElement('a-circle');
+    centre.setAttribute('radius', '0.062');
+    centre.setAttribute('material', 'color:#0d1020; opacity:0.92; transparent:true; shader:flat; side:double');
+    wheel.appendChild(centre);
+
+    var pageLabel = document.createElement('a-text');
+    pageLabel.setAttribute('position', '0 0.01 0.002');
+    pageLabel.setAttribute('align', 'center');
+    pageLabel.setAttribute('baseline', 'center');
+    pageLabel.setAttribute('color', '#6688cc');
+    pageLabel.setAttribute('width', '0.11');
+    pageLabel.setAttribute('value', '');
+    pageLabel.setAttribute('material', 'shader:flat');
+    wheel.appendChild(pageLabel);
+    this._pageLabel = pageLabel;
+
+    var pageHint = document.createElement('a-text');
+    pageHint.setAttribute('position', '0 -0.025 0.002');
+    pageHint.setAttribute('align', 'center');
+    pageHint.setAttribute('baseline', 'center');
+    pageHint.setAttribute('color', '#445566');
+    pageHint.setAttribute('width', '0.10');
+    pageHint.setAttribute('value', 'click\nflip');
+    pageHint.setAttribute('material', 'shader:flat');
+    wheel.appendChild(pageHint);
+
+    // Name label above the wheel
+    var nameLabel = document.createElement('a-text');
+    nameLabel.setAttribute('position', '0 0.30 0.002');
+    nameLabel.setAttribute('align', 'center');
+    nameLabel.setAttribute('color', '#ffffff');
+    nameLabel.setAttribute('width', '0.50');
+    nameLabel.setAttribute('value', '');
+    nameLabel.setAttribute('material', 'shader:flat');
+    wheel.appendChild(nameLabel);
+    this._nameLabel = nameLabel;
+
+    this._refreshLabels();
+  },
+
+  _refreshLabels: function () {
+    var items      = this._items();
+    var pageStart  = this._page * 8;
+    var totalPages = Math.ceil(items.length / 8);
+
+    for (var i = 0; i < 8; i++) {
+      var item = items[pageStart + i];
+      var lbl  = this._labelEls[i];
+      var seg  = this._segEls[i];
+      if (!lbl || !seg) continue;
+      if (item) {
+        lbl.setAttribute('text', 'value', item.name);
+        seg.setAttribute('material', 'color:#1a2030; opacity:0.88; transparent:true; shader:flat; side:double');
+      } else {
+        lbl.setAttribute('text', 'value', '');
+        seg.setAttribute('material', 'color:#0d0d18; opacity:0.50; transparent:true; shader:flat; side:double');
+      }
+    }
+
+    if (this._pageLabel) {
+      this._pageLabel.setAttribute('text', 'value', (this._page + 1) + ' / ' + (totalPages || 1));
+    }
+  },
+
+  _spawnItem: function (item) {
+    var cam = document.querySelector('#cam');
+    var rig = document.querySelector('#rig');
+    if (!cam || !rig) return;
+
+    // 2.5 m ahead in the direction the camera is facing, flattened to XZ
+    var fwd  = new THREE.Vector3(0, 0, -1);
+    var quat = new THREE.Quaternion();
+    cam.object3D.getWorldQuaternion(quat);
+    fwd.applyQuaternion(quat);
+    fwd.y = 0;
+    if (fwd.length() < 0.01) fwd.set(0, 0, -1);
+    fwd.normalize();
+
+    var rigPos = rig.object3D.position;
+    var px = (rigPos.x + fwd.x * 2.5).toFixed(2);
+    var pz = (rigPos.z + fwd.z * 2.5).toFixed(2);
+
+    // Unique name: base + count
+    this._spawnCounts[item.id] = (this._spawnCounts[item.id] || 0) + 1;
+    var name = item.id + '-' + this._spawnCounts[item.id];
+
+    var entity = document.createElement('a-entity');
+    entity.setAttribute('class', 'placeable');
+    entity.setAttribute('night-aware', '');
+    entity.setAttribute('data-name', name);
+    entity.setAttribute('gltf-model', item.src);
+    entity.setAttribute('position',   px + ' 0 ' + pz);
+    entity.setAttribute('scale',      item.scale + ' ' + item.scale + ' ' + item.scale);
+    this.el.sceneEl.appendChild(entity);
+
+    // Register with vr-placer so it can be grabbed immediately
+    var placer = this.el.sceneEl.components['vr-placer'];
+    if (placer) {
+      var sc = item.scale;
+      placer.originals[name] = { x: parseFloat(px), y: 0, z: parseFloat(pz), rotY: 0, scale: sc };
+      entity.addEventListener('model-loaded', function () {
+        requestAnimationFrame(function () {
+          var box = new THREE.Box3().setFromObject(entity.object3D);
+          placer.bboxCache[name] = { el: entity, box: box, lastPos: entity.object3D.position.clone() };
+          placer.bboxKeys = Object.keys(placer.bboxCache);
+          // Apply night tint if scene is in night mode
+          if (window._nightMode && entity.components['night-aware']) {
+            entity.components['night-aware'].applyNight(true);
+          }
+        });
+      });
+      // Floating name label
+      var lbl = document.createElement('a-text');
+      lbl.setAttribute('value', name);
+      lbl.setAttribute('position', '0 8 0');
+      lbl.setAttribute('align', 'center');
+      lbl.setAttribute('color', '#ffee88');
+      lbl.setAttribute('width', '12');
+      lbl.setAttribute('material', 'shader:flat');
+      entity.appendChild(lbl);
+    }
+  },
+
+  tick: function () {
+    if (!this._open || !this._leftCtrlEl) return;
+
+    var ltc = this._leftCtrlEl.components['tracked-controls-webxr'] ||
+              this._leftCtrlEl.components['tracked-controls'];
+    var lgp = ltc && ltc.controller && ltc.controller.gamepad;
+    if (!lgp || lgp.axes.length < 4) return;
+
+    var sx  = lgp.axes[2];
+    var sy  = lgp.axes[3];
+    var mag = Math.sqrt(sx * sx + sy * sy);
+
+    var newHighlight = -1;
+    if (mag > 0.35) {
+      // atan2(stickX, -stickY): 0 = up, goes clockwise — matches our slot layout
+      var angle = Math.atan2(sx, -sy) * 180 / Math.PI;
+      if (angle < 0) angle += 360;
+      newHighlight = Math.round(angle / 45) % 8;
+
+      // Blank slot = treat as no selection
+      var items = this._items();
+      if (!items[this._page * 8 + newHighlight]) newHighlight = -1;
+    }
+
+    if (newHighlight === this._highlighted) return;
+    this._highlighted = newHighlight;
+
+    // Update visual highlight
+    var items = this._items();
+    for (var i = 0; i < 8; i++) {
+      var seg  = this._segEls[i];
+      var lbl  = this._labelEls[i];
+      if (!seg) continue;
+      var hasItem = !!items[this._page * 8 + i];
+      if (i === newHighlight) {
+        seg.setAttribute('material', 'color:#3366ff; opacity:0.95; transparent:true; shader:flat; side:double');
+        if (lbl) lbl.setAttribute('text', 'color', '#ffffff');
+      } else {
+        seg.setAttribute('material', 'color:' + (hasItem ? '#1a2030' : '#0d0d18') + '; opacity:' + (hasItem ? '0.88' : '0.50') + '; transparent:true; shader:flat; side:double');
+        if (lbl) lbl.setAttribute('text', 'color', '#aabbcc');
+      }
+    }
+
+    // Name label above wheel
+    if (this._nameLabel) {
+      var item = newHighlight >= 0 ? items[this._page * 8 + newHighlight] : null;
+      this._nameLabel.setAttribute('text', 'value', item ? item.name : '');
+    }
   }
 });
