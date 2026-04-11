@@ -273,6 +273,9 @@ AFRAME.registerComponent('vr-placer', {
     self._tickDir     = new THREE.Vector3();
     self._tickDist    = new THREE.Vector3();
     self._tmpBox      = new THREE.Box3();
+    self._slowCtrlPos = new THREE.Vector3(); // slow-mode: current controller world pos
+    self._slowLastPos = new THREE.Vector3(); // slow-mode: previous frame pos
+    self._slowTracked = false;               // slow-mode: true once first valid pos captured
     self._leftOrigin  = new THREE.Vector3();
     self._leftDir     = new THREE.Vector3();
     self._leftDist    = new THREE.Vector3();
@@ -466,7 +469,7 @@ AFRAME.registerComponent('vr-placer', {
             self._spinPivot.set(self.held.object3D.position.x, 0, self.held.object3D.position.z);
             self._spinOffset.set(0, 0, 0);
             self.moving = true;
-            self._slowLastPos = null; // reset slow-mode delta tracking
+            self._slowTracked = false; // reset slow-mode delta tracking
           }
         });
 
@@ -485,7 +488,7 @@ AFRAME.registerComponent('vr-placer', {
           if (self._landingDot) self._landingDot.setAttribute('visible', 'false');
           self._playerRotLock = null;
           self._playerPosLock = null;
-          self._slowLastPos = null; // clear slow-mode delta tracking
+          self._slowTracked = false; // clear slow-mode delta tracking
           window._vrPlacerHeld = false;
           if (justReleased) {
             // Grid snap — round X and Z to nearest 0.5 m
@@ -981,7 +984,7 @@ AFRAME.registerComponent('vr-placer', {
           this._spinPivot.set(this.held.object3D.position.x, 0, this.held.object3D.position.z);
           this._spinOffset.set(0, 0, 0);
           this.moving = true;
-          this._slowLastPos = null; // reset slow-mode delta tracking
+          this._slowTracked = false; // reset slow-mode delta tracking
           this.laserPivot.object3D.getWorldPosition(this._tickOrigin);
           this._holdOffset.set(
             this.held.object3D.position.x - this._tickOrigin.x,
@@ -1012,22 +1015,27 @@ AFRAME.registerComponent('vr-placer', {
     // ── Move ──────────────────────────────────────────────────────────────
     if (this.moving) {
       if (window._slowMoveMode) {
-        // SLOW mode: 1:1 hand position delta — controller moves building 1cm per 1cm
-        var _ctrlPos = new THREE.Vector3();
-        if (this._rightCtrlEl) this._rightCtrlEl.object3D.getWorldPosition(_ctrlPos);
-        if (this._slowLastPos) {
-          var _dx = _ctrlPos.x - this._slowLastPos.x;
-          var _dz = _ctrlPos.z - this._slowLastPos.z;
-          this.held.object3D.position.x += _dx;
-          this.held.object3D.position.z += _dz;
+        // SLOW mode: 1:1 hand-to-building movement (no laser projection)
+        if (this._rightCtrlEl) {
+          this._rightCtrlEl.object3D.getWorldPosition(this._slowCtrlPos);
+          // Guard: skip if controller not yet tracked (position at origin)
+          var _mag = this._slowCtrlPos.x * this._slowCtrlPos.x +
+                     this._slowCtrlPos.z * this._slowCtrlPos.z;
+          if (_mag > 0.001) {
+            if (this._slowTracked) {
+              this.held.object3D.position.x += this._slowCtrlPos.x - this._slowLastPos.x;
+              this.held.object3D.position.z += this._slowCtrlPos.z - this._slowLastPos.z;
+            }
+            this._slowLastPos.copy(this._slowCtrlPos);
+            this._slowTracked = true;
+          }
         }
-        this._slowLastPos = _ctrlPos.clone();
-        // Landing dot sits at the building's feet
+        // Landing dot at building's feet
         if (this._landingDot) {
-          var _bx = this.held.object3D.position.x;
-          var _bz = this.held.object3D.position.z;
-          var _by = this.held.object3D.position.y;
-          this._landingDot.object3D.position.set(_bx, _by + 0.02, _bz);
+          this._landingDot.object3D.position.set(
+            this.held.object3D.position.x,
+            this.held.object3D.position.y + 0.02,
+            this.held.object3D.position.z);
           this._landingDot.setAttribute('visible', 'true');
         }
       } else {
@@ -1825,7 +1833,7 @@ AFRAME.registerComponent('control-panel', {
           nameEl.setAttribute('value', item.label);
           nameEl.setAttribute('align', 'center');
           nameEl.setAttribute('baseline', 'center');
-          nameEl.setAttribute('color', item.info ? '#445566' : '#99aabb');
+          nameEl.setAttribute('color', item.info ? '#445566' : '#cce0f0');
           nameEl.setAttribute('width', '0.22');
           nameEl.setAttribute('position', '0 0.022 0.002');
           nameEl.setAttribute('material', 'shader:flat');
@@ -1836,7 +1844,7 @@ AFRAME.registerComponent('control-panel', {
           subEl.setAttribute('value', item.sub || '');
           subEl.setAttribute('align', 'center');
           subEl.setAttribute('baseline', 'center');
-          subEl.setAttribute('color', '#2a3d52');
+          subEl.setAttribute('color', '#6699bb');
           subEl.setAttribute('width', '0.19');
           subEl.setAttribute('position', '0 -0.021 0.002');
           subEl.setAttribute('material', 'shader:flat');
@@ -1891,11 +1899,11 @@ AFRAME.registerComponent('control-panel', {
                : isMode ? '#44ff88'
                : item && item.info ? '#3a5066'
                : item && item.special === 'reset' && this._resetPending ? '#ff6666'
-               : '#99aabb';
+               : '#cce0f0';
         cell._nameEl.setAttribute('text', 'color', nc);
       }
       if (cell._subEl) {
-        cell._subEl.setAttribute('text', 'color', isSel ? '#6688cc' : '#2a3d52');
+        cell._subEl.setAttribute('text', 'color', isSel ? '#99ccff' : '#6699bb');
       }
     }
 
