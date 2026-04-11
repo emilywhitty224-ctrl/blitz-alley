@@ -410,8 +410,10 @@
         self._spinPivot   = new THREE.Vector3(); // world-space XZ pivot for rotation
         self._spinOffset  = new THREE.Vector3(); // object centre relative to pivot
         self._holdOffset  = new THREE.Vector3(); // building pos minus controller pos at triggerdown
+        self._btnPts      = null; // world-space clickable button positions, set after scene load
         self._nudgeX      = false; // left stick X was above threshold last frame
         self._nudgeZ      = false; // left stick Y was above threshold last frame
+        self._tiltMode    = false; // both grips held → right stick tilts instead of spin/scale
         self._leftCtrlEl  = null;  // cached for left gamepad polling
 
         this.el.sceneEl.addEventListener('loaded', function () {
@@ -421,6 +423,12 @@
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           self._rightCtrlEl = rightCtrl;
           self._leftCtrlEl  = leftCtrl;
+          // World-space clickable buttons — laser trigger fires these when no building held
+          self._btnPts = [
+            { pos: new THREE.Vector3(5.5, 1.15, -33),  fn: function () { if (window.toggleNight) window.toggleNight(); } },
+            { pos: new THREE.Vector3(8.2, 1.15, -33),  fn: function () { if (window._resetPending) { window._doReset && window._doReset(); } else { window._resetPending = true; if (self.outText) { self.outText.setAttribute('visible','true'); self.outText.setAttribute('value','RESET MAP?\nTrigger again to confirm'); } setTimeout(function(){ window._resetPending=false; if(self.outText)self.outText.setAttribute('visible','false'); }, 5000); } } }
+          ];
+          self._btnRay = new THREE.Ray();
           var leftCtrl  = document.querySelector('[oculus-touch-controls*="left"]');
 
           // ── Store originals + build bbox cache after models settle ──
@@ -591,6 +599,18 @@
                   0,
                   self.held.object3D.position.z - self._tickOrigin.z
                 );
+              } else if (!self.gripping && self._btnPts) {
+                // Check if laser is pointing at any world button
+                laserPivot.object3D.getWorldPosition(self._tickOrigin);
+                laserPivot.object3D.getWorldQuaternion(self.tmpQuat);
+                self._tickDir.set(0, 0, -1).applyQuaternion(self.tmpQuat).normalize();
+                self._btnRay.set(self._tickOrigin, self._tickDir);
+                for (var bi = 0; bi < self._btnPts.length; bi++) {
+                  if (self._btnRay.distanceToPoint(self._btnPts[bi].pos) < 0.4) {
+                    self._btnPts[bi].fn();
+                    break;
+                  }
+                }
               }
             });
             rightCtrl.addEventListener('triggerup', function () {
@@ -986,21 +1006,39 @@
           }
         }
 
-        // ── Spin — right stick X, pivoting around laser hit point ──────
-        if (Math.abs(this.stickX) > 0.15) {
-          var dA  = this.stickX * 0.02;
-          this.held.object3D.rotation.y += dA;
-          // Orbit object centre around spin pivot
-          var cos = Math.cos(dA), sin = Math.sin(dA);
-          var ox  = this._spinOffset.x, oz = this._spinOffset.z;
-          this._spinOffset.x = ox * cos - oz * sin;
-          this._spinOffset.z = ox * sin + oz * cos;
-          this.held.object3D.position.x = this._spinPivot.x + this._spinOffset.x;
-          this.held.object3D.position.z = this._spinPivot.z + this._spinOffset.z;
+        // ── Tilt mode: both grips held → right stick tilts the building ──
+        this._tiltMode = this.gripping && this.leftGripping;
+
+        if (this._tiltMode) {
+          // Right stick X → lean left/right (Z-axis rotation)
+          // Right stick Y → lean forward/back (X-axis rotation)
+          if (Math.abs(this.stickX) > 0.15)
+            this.held.object3D.rotation.z -= this.stickX * 0.018;
+          if (Math.abs(this.scaleY) > 0.15)
+            this.held.object3D.rotation.x -= this.scaleY * 0.018;
+        } else {
+          // ── Spin — right stick X, pivoting around laser hit point ────
+          if (Math.abs(this.stickX) > 0.15) {
+            var dA  = this.stickX * 0.02;
+            this.held.object3D.rotation.y += dA;
+            var cos = Math.cos(dA), sin = Math.sin(dA);
+            var ox  = this._spinOffset.x, oz = this._spinOffset.z;
+            this._spinOffset.x = ox * cos - oz * sin;
+            this._spinOffset.z = ox * sin + oz * cos;
+            this.held.object3D.position.x = this._spinPivot.x + this._spinOffset.x;
+            this.held.object3D.position.z = this._spinPivot.z + this._spinOffset.z;
+          }
+
+          // ── Scale — right stick Y: up = bigger, down = smaller ───────
+          var adjusting = false;
+          if (Math.abs(this.scaleY) > 0.15) {
+            var ns = Math.max(0.02, this.held.object3D.scale.x + this.scaleY * 0.002);
+            this.held.object3D.scale.setScalar(ns);
+            adjusting = true;
+          }
         }
 
         // ── Nudge — left stick X/Z, only when NOT trigger-moving and NOT left-gripping
-        // Edge-triggered: one 0.1m step per stick deflection, not continuous
         if (!this.moving && !this.leftGripping) {
           var NUDGE = 0.1;
           var nxOn = Math.abs(leftNudgeX) > 0.5;
@@ -1014,13 +1052,7 @@
           this._nudgeZ = false;
         }
 
-        // ── Scale — right stick Y: up = bigger, down = smaller ─────────
-        var adjusting = false;
-        if (Math.abs(this.scaleY) > 0.15) {
-          var ns = Math.max(0.02, this.held.object3D.scale.x + this.scaleY * 0.002);
-          this.held.object3D.scale.setScalar(ns);
-          adjusting = true;
-        }
+        var adjusting = this._tiltMode ? false : adjusting;
 
         // ── Live scale readout ───────────────────────────────────────────
         if (this.readout) {
