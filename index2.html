@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blackout Alley — London, 1940</title>
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js" crossorigin="anonymous"></script>
 
   <!-- VR placer tools — all reusable A-Frame components -->
   <script src="vr-placer.js"></script>
@@ -425,14 +425,14 @@ Green: visitor / build"
       </a-cursor>
     </a-entity>
 
-    <a-entity oculus-touch-controls="hand: left">
+    <a-entity oculus-touch-controls="hand: left; model: false">
       <a-text value="trigger: spawn" position="0.032 0.018 -0.052" rotation="-50 0 0" color="#ffee44" width="0.16" align="left"></a-text>
       <a-text value="Y: save"        position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#44ffaa" width="0.16" align="left"></a-text>
       <a-text value="grip: height"   position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
       <a-text value="stick: walk"    position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
     </a-entity>
 
-    <a-entity oculus-touch-controls="hand: right">
+    <a-entity oculus-touch-controls="hand: right; model: false">
       <a-text value="grip: grab"      position="0.032 0.008 -0.052" rotation="-50 0 0" color="#ffaa44" width="0.16" align="left"></a-text>
       <a-text value="A: floor snap"   position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#88ff88" width="0.16" align="left"></a-text>
       <a-text value="stick↓: tool"    position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
