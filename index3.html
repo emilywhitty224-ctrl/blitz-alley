@@ -6,6 +6,7 @@
   <title>Blitz Alley — London, 1940</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js" crossorigin="anonymous"></script>
+  <script src="vr-placer.js"></script>
 </head>
 <body>
 <a-scene
@@ -31,7 +32,7 @@
             movement-controls="fly: false; speed: 0.2; camera: #cam">
     <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
 
-    <a-entity oculus-touch-controls="hand: left;  model: false"></a-entity>
+    <a-entity oculus-touch-controls="hand: left; model: false"></a-entity>
     <a-entity oculus-touch-controls="hand: right; model: false"></a-entity>
   </a-entity>
 
