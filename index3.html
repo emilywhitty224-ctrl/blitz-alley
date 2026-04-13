@@ -9,9 +9,9 @@
 </head>
 <body>
 <a-scene
-  fog="type: linear; color: #050810; near: 20; far: 70"
-  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08"
-  background="color: #020408">
+  fog="type: linear; color: #b0c8e8; near: 60; far: 120"
+  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
+  background="color: #87ceeb">
 
   <a-assets timeout="120000">
     <a-asset-item id="blitz-alley-glb" src="blitz_alley_c.glb"></a-asset-item>
@@ -21,9 +21,9 @@
   <a-entity gltf-model="#blitz-alley-glb" position="0 0 0" scale="1 1 1"></a-entity>
 
   <!-- ═══ LIGHTING ═══ -->
-  <a-light type="ambient" color="#1a2233" intensity="0.4"></a-light>
-  <a-light type="point" color="#ff7722" intensity="1.2" distance="30" decay="1.8"
-           position="0 2 -10" ></a-light>
+  <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>
+  <a-light type="hemisphere" color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
+  <a-light type="directional" color="#ffffff" intensity="1.8" position="-5 20 10"></a-light>
 
   <!-- ═══ PLAYER ═══ -->
   <a-entity id="rig" position="0 0 0"
