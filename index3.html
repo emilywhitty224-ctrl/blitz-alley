@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blitz Alley — London, 1940</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+<a-scene
+  fog="type: linear; color: #050810; near: 20; far: 70"
+  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08"
+  background="color: #020408">
+
+  <a-assets timeout="120000">
+    <a-asset-item id="blitz-alley-glb" src="blitz_alley_c.glb"></a-asset-item>
+  </a-assets>
+
+  <!-- ═══ SCENE ═══ -->
+  <a-entity gltf-model="#blitz-alley-glb" position="0 0 0" scale="1 1 1"></a-entity>
+
+  <!-- ═══ LIGHTING ═══ -->
+  <a-light type="ambient" color="#1a2233" intensity="0.4"></a-light>
+  <a-light type="point" color="#ff7722" intensity="1.2" distance="30" decay="1.8"
+           position="0 2 -10" ></a-light>
+
+  <!-- ═══ PLAYER ═══ -->
+  <a-entity id="rig" position="0 0 0"
+            movement-controls="fly: false; speed: 0.2; camera: #cam">
+    <a-entity id="cam" camera look-controls position="0 1.6 0"></a-entity>
+
+    <a-entity oculus-touch-controls="hand: left;  model: false"></a-entity>
+    <a-entity oculus-touch-controls="hand: right; model: false"></a-entity>
+  </a-entity>
+
+</a-scene>
+</body>
+</html>
