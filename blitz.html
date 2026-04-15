@@ -8,6 +8,23 @@
   <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js" crossorigin="anonymous"></script>
   <script src="vr-placer.js"></script>
   <script>window._walkSpeed = 0.1;</script>
+  <script>
+    AFRAME.registerComponent('night-darken', {
+      init: function () {
+        this.el.addEventListener('model-loaded', function (e) {
+          e.detail.model.traverse(function (node) {
+            if (!node.isMesh) return;
+            var mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach(function (mat) {
+              // Dark cool-blue tint — multiplies the baked texture colour
+              mat.color.setRGB(0.06, 0.07, 0.10);
+              mat.needsUpdate = true;
+            });
+          });
+        });
+      }
+    });
+  </script>
   <style>
     #version-overlay {
       position: fixed;
@@ -35,7 +52,7 @@
     <a-asset-item id="scene-glb" src="blitz_alley8.glb"></a-asset-item>
   </a-assets>
 
-  <a-entity gltf-model="#scene-glb" position="0 0 0" scale="1 1 1"></a-entity>
+  <a-entity gltf-model="#scene-glb" position="0 0 0" scale="1 1 1" night-darken></a-entity>
 
   <a-light type="ambient" color="#0a0f1a" intensity="0.08"></a-light>
   <a-light type="point" color="#ffaa33" intensity="80" distance="12" decay="2" position="3.32 3.07 -19.04"></a-light>
