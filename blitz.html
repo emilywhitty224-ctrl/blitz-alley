@@ -13,9 +13,9 @@
 <a-scene
   draco-loader
   vr-placer
-  fog="type: linear; color: #b0c8e8; near: 60; far: 120"
-  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
-  background="color: #87ceeb">
+  fog="type: linear; color: #050810; near: 15; far: 50"
+  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.06"
+  background="color: #020408">
 
   <a-assets timeout="120000">
     <a-asset-item id="scene-glb" src="blitz_alley5.glb"></a-asset-item>
@@ -23,9 +23,8 @@
 
   <a-entity gltf-model="#scene-glb" position="0 0 0" scale="1 1 1"></a-entity>
 
-  <a-light type="ambient"     color="#ffffff" intensity="1.2"></a-light>
-  <a-light type="hemisphere"  color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
-  <a-light type="directional" color="#ffffff" intensity="1.8" position="-5 20 10"></a-light>
+  <a-light type="ambient" color="#1a2a4a" intensity="0.5"></a-light>
+  <a-light type="point" color="#ff6600" intensity="2.0" distance="20" decay="2" position="0 3 -10"></a-light>
 
   <a-entity id="rig" position="0 0 0"
             movement-controls="fly: false; speed: 0.2; camera: #cam">
