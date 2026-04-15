@@ -1260,7 +1260,7 @@ AFRAME.registerComponent('vr-placer', {
             this._locoRight.applyQuaternion(this._locoCQ);
             this._locoRight.y = 0;
             if (this._locoRight.lengthSq() > 0.0001) this._locoRight.normalize();
-            var spd = (window._visitorMode ? 0.35 : 0.2) / 60;
+            var spd = (window._walkSpeed !== undefined ? window._walkSpeed : (window._visitorMode ? 0.35 : 0.2)) / 60;
             this._rigEl.object3D.position.x += this._locoFwd.x * (-lmy) * spd + this._locoRight.x * lmx * spd;
             this._rigEl.object3D.position.z += this._locoFwd.z * (-lmy) * spd + this._locoRight.z * lmx * spd;
           }
