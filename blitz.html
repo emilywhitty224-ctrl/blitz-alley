@@ -8,6 +8,20 @@
   <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js" crossorigin="anonymous"></script>
   <script src="vr-placer.js"></script>
   <script>window._walkSpeed = 0.1;</script>
+  <style>
+    #version-overlay {
+      position: fixed;
+      bottom: 18px;
+      right: 90px;
+      color: #88aacc;
+      font-family: monospace;
+      font-size: 13px;
+      opacity: 0.75;
+      pointer-events: none;
+      z-index: 9999;
+      user-select: none;
+    }
+  </style>
 </head>
 <body>
 <a-scene
@@ -34,5 +48,6 @@
   </a-entity>
 
 </a-scene>
+<div id="version-overlay">v7</div>
 </body>
 </html>
