@@ -118,15 +118,24 @@
       var scene  = document.querySelector('a-scene');
       var sky    = document.querySelector('a-sky');
       var btn    = document.querySelector('#night-btn');
+      var ambient    = document.querySelector('#ambient-light');
+      var hemisphere = document.querySelector('#hemisphere-light');
+      var sunLight   = document.querySelector('#sun-light');
       if (window._nightMode) {
-        if (sky) sky.setAttribute('color', '#020408');
-        scene.setAttribute('fog', 'type: linear; color: #050810; near: 20; far: 70');
+        if (sky)       sky.setAttribute('color', '#010306');
+        scene.setAttribute('fog', 'type: linear; color: #010306; near: 4; far: 16');
         scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08');
+        if (ambient)    ambient.setAttribute('light',    'intensity: 0.02');
+        if (hemisphere) hemisphere.setAttribute('light', 'intensity: 0');
+        if (sunLight)   sunLight.setAttribute('light',   'intensity: 0');
         if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
       } else {
-        if (sky) sky.setAttribute('color', '#87ceeb');
+        if (sky)       sky.setAttribute('color', '#87ceeb');
         scene.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
         scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
+        if (ambient)    ambient.setAttribute('light',    'intensity: 1.2');
+        if (hemisphere) hemisphere.setAttribute('light', 'color: #87ceeb; groundColor: #8B7355; intensity: 1.0');
+        if (sunLight)   sunLight.setAttribute('light',   'intensity: 1.8');
         if (btn) btn.setAttribute('material', 'color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat');
       }
       // Apply/remove night tint on all registered buildings
@@ -262,10 +271,9 @@
   <!-- X runs from -60 to +60. Walk sideways to browse, grab and drag into position. -->
 
   <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
-  <a-light type="ambient" color="#ffffff" intensity="1.2"></a-light>
-  <a-light type="hemisphere" color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
-  <a-light type="directional" color="#ffffff" intensity="1.8"
-           position="-5 20 10"></a-light>
+  <a-light id="ambient-light"     type="ambient"     color="#ffffff" intensity="1.2"></a-light>
+  <a-light id="hemisphere-light"  type="hemisphere"  color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
+  <a-light id="sun-light"         type="directional" color="#ffffff" intensity="1.8" position="-5 20 10"></a-light>
   <a-light type="point" color="#ff7722" intensity="0.7" distance="50" decay="1.4"
            position="0 3 -50" fire-flicker></a-light>
 
@@ -446,7 +454,14 @@ Green: visitor / build"
       <a-text value="Y: save"        position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#44ffaa" width="0.16" align="left"></a-text>
       <a-text value="grip: height"   position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
       <a-text value="stick: walk"    position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
-      <!-- Carried torch — held in left hand, tilted upright -->
+    </a-entity>
+
+    <a-entity oculus-touch-controls="hand: right; model: false">
+      <a-text value="grip: grab"      position="0.032 0.008 -0.052" rotation="-50 0 0" color="#ffaa44" width="0.16" align="left"></a-text>
+      <a-text value="A: floor snap"   position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#88ff88" width="0.16" align="left"></a-text>
+      <a-text value="stick↓: tool"    position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
+      <a-text value="stick: spin/scale" position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.12" align="left"></a-text>
+      <!-- Carried torch — held in right hand, tilted upright -->
       <a-entity position="0 0.05 -0.08" rotation="40 0 0">
         <!-- Handle -->
         <a-cylinder radius="0.018" height="0.28"
@@ -476,13 +491,6 @@ Green: visitor / build"
                   torch-flicker="base:0.9; range:0.35; speed:9"
                   position="0 0.24 0"></a-entity>
       </a-entity>
-    </a-entity>
-
-    <a-entity oculus-touch-controls="hand: right; model: false">
-      <a-text value="grip: grab"      position="0.032 0.008 -0.052" rotation="-50 0 0" color="#ffaa44" width="0.16" align="left"></a-text>
-      <a-text value="A: floor snap"   position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#88ff88" width="0.16" align="left"></a-text>
-      <a-text value="stick↓: tool"    position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
-      <a-text value="stick: spin/scale" position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.12" align="left"></a-text>
     </a-entity>
   </a-entity>
 
