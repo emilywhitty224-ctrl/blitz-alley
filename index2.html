@@ -121,6 +121,8 @@
       var ambient    = document.querySelector('#ambient-light');
       var hemisphere = document.querySelector('#hemisphere-light');
       var sunLight   = document.querySelector('#sun-light');
+      var bounce     = document.querySelector('#bounce-fill');
+      var moonLight  = document.querySelector('#moon-light');
       if (window._nightMode) {
         if (sky) { sky.setAttribute('src', '#night-sky-img'); sky.removeAttribute('color'); }
         scene.setAttribute('fog', 'type: linear; color: #010306; near: 4; far: 16');
@@ -128,6 +130,8 @@
         if (ambient)    ambient.setAttribute('light',    'intensity: 0.02');
         if (hemisphere) hemisphere.setAttribute('light', 'intensity: 0');
         if (sunLight)   sunLight.setAttribute('light',   'intensity: 0');
+        if (bounce)     bounce.setAttribute('light',     'intensity: 0.12');
+        if (moonLight)  moonLight.setAttribute('light',  'intensity: 0.04');
         if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
       } else {
         if (sky) { sky.removeAttribute('src'); sky.setAttribute('color', '#87ceeb'); }
@@ -136,6 +140,8 @@
         if (ambient)    ambient.setAttribute('light',    'intensity: 1.2');
         if (hemisphere) hemisphere.setAttribute('light', 'color: #87ceeb; groundColor: #8B7355; intensity: 1.0');
         if (sunLight)   sunLight.setAttribute('light',   'intensity: 1.8');
+        if (bounce)     bounce.setAttribute('light',     'intensity: 0');
+        if (moonLight)  moonLight.setAttribute('light',  'intensity: 0');
         if (btn) btn.setAttribute('material', 'color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat');
       }
       // Apply/remove night tint on all registered buildings
@@ -441,6 +447,10 @@ Green: visitor / build"
   <a-entity id="rig" position="0 0 -33"
             movement-controls="fly: false; speed: 0.2; camera: #cam">
     <a-entity id="cam" camera look-controls position="0 1.6 0">
+      <!-- Bounce fill: simulates torch light already reflected off nearby walls/floor. Night only. -->
+      <a-entity id="bounce-fill" light="type:point; color:#ff6600; intensity:0; distance:6; decay:1" position="0 -0.4 0"></a-entity>
+      <!-- Moonlight: faint cool directional rim. Night only. -->
+      <a-entity id="moon-light" light="type:directional; color:#8899cc; intensity:0" position="0.3 1 -0.2"></a-entity>
       <!-- Gaze cursor: look at .btn objects for 1.5s to activate -->
       <a-cursor fuse="true" fuse-timeout="1500"
                 raycaster="objects: .btn; far: 20; interval: 200"
@@ -488,7 +498,7 @@ Green: visitor / build"
                   material="color:#ffdd44; emissive:#ffcc00; emissiveIntensity:1; shader:flat; transparent:true; opacity:0.85"
                   position="0 0.232 0"></a-sphere>
         <!-- Flickering point light -->
-        <a-entity light="type:point; color:#ff8822; intensity:0.9; distance:5; decay:2"
+        <a-entity light="type:point; color:#ff8822; intensity:0.9; distance:9; decay:1"
                   torch-flicker="base:0.9; range:0.35; speed:9"
                   position="0 0.24 0"></a-entity>
       </a-entity>
