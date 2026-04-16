@@ -66,6 +66,7 @@ AFRAME.registerComponent('victorian-night', { init: function () {} });
 // buildings including newly cloned ones.
 window._nightAware = [];
 AFRAME.registerComponent('night-aware', {
+  schema: { brightness: {default: 0.13}, blueBoost: {default: 1.25} },
   init: function () {
     var self = this;
     self._origColors = [];
@@ -99,7 +100,7 @@ AFRAME.registerComponent('night-aware', {
   },
   applyNight: function (on) {
     if (!this._ready) return;
-    var br = 0.13, bl = 1.25;
+    var br = this.data.brightness, bl = this.data.blueBoost;
     this._origColors.forEach(function (c) {
       if (on) {
         c.mat.color.r = c.r * br * 0.85;
