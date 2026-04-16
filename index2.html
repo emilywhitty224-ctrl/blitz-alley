@@ -114,42 +114,54 @@
     // Shared day/night toggle — called by both the world button and left trigger
     window._nightMode = false;
     window.toggleNight = function () {
-      window._nightMode = !window._nightMode;
-      var scene  = document.querySelector('a-scene');
-      var sky    = document.querySelector('#sky');
-      var btn    = document.querySelector('#night-btn');
-      var ambient    = document.querySelector('#ambient-light');
-      var hemisphere = document.querySelector('#hemisphere-light');
-      var sunLight   = document.querySelector('#sun-light');
-      var bounce     = document.querySelector('#bounce-fill');
-      var moonLight  = document.querySelector('#moon-light');
-      if (window._nightMode) {
-        if (sky) { sky.setAttribute('src', '#night-sky-img'); sky.setAttribute('color', '#ffffff'); }
-        scene.setAttribute('fog', 'type: linear; color: #010306; near: 4; far: 16');
-        scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08');
-        if (ambient)    ambient.setAttribute('light',    'intensity: 0.02');
-        if (hemisphere) hemisphere.setAttribute('light', 'intensity: 0');
-        if (sunLight)   sunLight.setAttribute('light',   'intensity: 0');
-        if (bounce)     bounce.setAttribute('light',     'intensity: 0.12');
-        if (moonLight)  moonLight.setAttribute('light',  'intensity: 0.04');
-        if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
-      } else {
-        if (sky) { sky.setAttribute('src', ''); sky.setAttribute('color', '#87ceeb'); }
-        scene.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
-        scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
-        if (ambient)    ambient.setAttribute('light',    'intensity: 1.2');
-        if (hemisphere) hemisphere.setAttribute('light', 'color: #87ceeb; groundColor: #8B7355; intensity: 1.0');
-        if (sunLight)   sunLight.setAttribute('light',   'intensity: 1.8');
-        if (bounce)     bounce.setAttribute('light',     'intensity: 0');
-        if (moonLight)  moonLight.setAttribute('light',  'intensity: 0');
-        if (btn) btn.setAttribute('material', 'color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat');
-      }
-      // Apply/remove night tint on all registered buildings
-      (window._nightAware || []).forEach(function (c) { c.applyNight(window._nightMode); });
+      try {
+        window._nightMode = !window._nightMode;
+        var sky        = document.querySelector('#sky');
+        var btn        = document.querySelector('#night-btn');
+        var ambient    = document.querySelector('#ambient-light');
+        var hemisphere = document.querySelector('#hemisphere-light');
+        var sunLight   = document.querySelector('#sun-light');
+        var bounce     = document.querySelector('#bounce-fill');
+        var moonLight  = document.querySelector('#moon-light');
+        var scene      = document.querySelector('a-scene');
+        if (window._nightMode) {
+          if (sky) { sky.setAttribute('src', '#night-sky-img'); sky.setAttribute('color', '#ffffff'); }
+          if (scene) scene.setAttribute('fog', 'type: linear; color: #010306; near: 4; far: 16');
+          if (ambient)    ambient.setAttribute('light',    'intensity: 0.02');
+          if (hemisphere) hemisphere.setAttribute('light', 'intensity: 0');
+          if (sunLight)   sunLight.setAttribute('light',   'intensity: 0');
+          if (bounce)     bounce.setAttribute('light',     'intensity: 0.12');
+          if (moonLight)  moonLight.setAttribute('light',  'intensity: 0.04');
+          if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
+        } else {
+          if (sky) { sky.removeAttribute('src'); sky.setAttribute('color', '#87ceeb'); }
+          if (scene) scene.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
+          if (ambient)    ambient.setAttribute('light',    'intensity: 1.2');
+          if (hemisphere) hemisphere.setAttribute('light', 'color: #87ceeb; groundColor: #8B7355; intensity: 1.0');
+          if (sunLight)   sunLight.setAttribute('light',   'intensity: 1.8');
+          if (bounce)     bounce.setAttribute('light',     'intensity: 0');
+          if (moonLight)  moonLight.setAttribute('light',  'intensity: 0');
+          if (btn) btn.setAttribute('material', 'color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat');
+        }
+        // Apply/remove night tint on all registered buildings
+        (window._nightAware || []).forEach(function (c) {
+          try { c.applyNight(window._nightMode); } catch(e) {}
+        });
+      } catch(e) { console.error('toggleNight error:', e); }
+    };
+
+    // Torch on/off — toggled by right A button when nothing is held
+    window._torchOn = true;
+    window.toggleTorch = function () {
+      try {
+        window._torchOn = !window._torchOn;
+        var torch = document.querySelector('#torch');
+        if (torch) torch.setAttribute('visible', window._torchOn ? 'true' : 'false');
+      } catch(e) { console.error('toggleTorch error:', e); }
     };
 
     // Visitor / walk mode toggle — defined here (top-level) so control-panel can call it at any time
-    window.toggleVisitorMode = function () {
+    window.toggleVisitorMode = function () { try {
       window._visitorMode = !window._visitorMode;
       var vBtn = document.querySelector('#visitor-btn');
       var vLbl = document.querySelector('#visitor-sub');
@@ -164,7 +176,7 @@
         var _laser = document.querySelector('[oculus-touch-controls*="right"] a-box');
         if (_laser) _laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
       }
-    };
+    } catch(e) { console.error('toggleVisitorMode error:', e); } };
 
     // Wire up buttons (gaze fuse fires 'click')
     document.addEventListener('DOMContentLoaded', function () {
@@ -473,7 +485,7 @@ Green: visitor / build"
       <a-text value="stick↓: tool"    position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
       <a-text value="stick: spin/scale" position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.12" align="left"></a-text>
       <!-- Carried torch — held in right hand, tilted upright -->
-      <a-entity position="0 0.05 -0.08" rotation="40 0 0">
+      <a-entity id="torch" position="0 0.05 -0.08" rotation="40 0 0">
         <!-- Handle -->
         <a-cylinder radius="0.018" height="0.28"
                     material="color:#3b1f0a; roughness:0.9; metalness:0"

@@ -586,7 +586,11 @@ AFRAME.registerComponent('vr-placer', {
           // No building held — double-tap A to lock/unlock hovered building
           var now    = Date.now();
           var target = self.hovered || self._lockPending;
-          if (!target) return;
+          if (!target) {
+            // Nothing hovered — toggle torch
+            if (window.toggleTorch) window.toggleTorch();
+            return;
+          }
           var id = target.getAttribute('data-name');
           if (self._lockPending && self._lockPending === target && (now - self._aLastTap) < 2000) {
             var wasLocked = self._lockedBuildings[id];
