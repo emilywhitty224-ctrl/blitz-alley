@@ -104,29 +104,21 @@
       }
     });
 
-    // ── Snap turn — right thumbstick, 45° per click ───────────────────────
-    AFRAME.registerComponent('snap-turn', {
-      init: function () {
-        var rig = this.el;
-        var _cooldown = false;
-        function bind() {
-          var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
-          if (!rightCtrl) { setTimeout(bind, 500); return; }
-          rightCtrl.addEventListener('thumbstickmoved', function (e) {
-            if (_cooldown || Math.abs(e.detail.x) < 0.7) return;
-            rig.object3D.rotation.y += THREE.MathUtils.degToRad(e.detail.x > 0 ? -45 : 45);
-            _cooldown = true;
-            setTimeout(function () { _cooldown = false; }, 350);
-          });
-        }
-        bind();
+    // ── Smooth turn — right thumbstick, continuous rotation ──────────────
+    AFRAME.registerComponent('smooth-turn', {
+      schema: { speed: { default: 60 } }, // degrees per second
+      init: function () { this._stickX = 0; },
+      tick: function (t, dt) {
+        if (Math.abs(this._stickX) < 0.15) return;
+        this.el.object3D.rotation.y -= THREE.MathUtils.degToRad(this._stickX * this.data.speed * dt / 1000);
       }
     });
 
-    // ── Torch toggle — right A button ────────────────────────────────────
+    // ── Torch toggle + stick input — on the right controller ─────────────
     AFRAME.registerComponent('torch-toggle', {
       init: function () {
         var _on = true;
+        var rig = document.querySelector('#rig');
         function bind() {
           var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
           if (!rightCtrl) { setTimeout(bind, 500); return; }
@@ -136,6 +128,15 @@
               var torch = document.querySelector('#torch');
               if (torch) torch.setAttribute('visible', _on ? 'true' : 'false');
             } catch(e) {}
+          });
+          // Feed right stick X into smooth-turn
+          rightCtrl.addEventListener('thumbstickmoved', function (e) {
+            var st = rig && rig.components['smooth-turn'];
+            if (st) st._stickX = e.detail.x;
+          });
+          rightCtrl.addEventListener('thumbstickup', function () {
+            var st = rig && rig.components['smooth-turn'];
+            if (st) st._stickX = 0;
           });
         }
         bind();
@@ -201,7 +202,7 @@
   <!-- ═══ PLAYER ═══ -->
   <a-entity id="rig" position="0 0 -33"
             movement-controls="fly: false; speed: 0.2; camera: #cam"
-            snap-turn>
+            smooth-turn="speed: 60">
     <a-entity id="cam" camera look-controls position="0 1.6 0">
       <!-- Bounce fill: simulates torch light bounced off nearby walls/floor -->
       <a-entity light="type:point; color:#ff6600; intensity:0.12; distance:6; decay:1" position="0 -0.4 0"></a-entity>
