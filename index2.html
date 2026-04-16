@@ -7,74 +7,29 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.4.0/dist/aframe-extras.min.js" crossorigin="anonymous"></script>
 
-  <!-- VR placer tools — all reusable A-Frame components -->
-  <script src="vr-placer.js"></script>
-
   <style>
-    #crash-log {
-      display: none;
-      position: fixed;
-      top: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1a0000;
-      color: #ff6666;
-      font-family: monospace;
-      font-size: 11px;
-      padding: 6px 12px;
-      border: 1px solid #ff3333;
-      border-radius: 4px;
-      z-index: 9999;
-      max-width: 90vw;
-      word-break: break-all;
-    }
-    #version-overlay {
-      position: fixed;
-      bottom: 18px;
-      right: 90px;
-      color: #88aacc;
-      font-family: monospace;
-      font-size: 13px;
-      opacity: 0.75;
-      pointer-events: none;
-      z-index: 9999;
-      user-select: none;
+    body { margin: 0; background: #000; }
+    #loading-overlay {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      color: #ffee88; font: 14px monospace; background: rgba(0,0,0,0.6);
+      padding: 4px 12px; border-radius: 4px; pointer-events: none; z-index: 99;
     }
   </style>
 
   <script>
-    var PLACER_VERSION = 'v1.7';
-
-    // Show last crash error on reload
-    document.addEventListener('DOMContentLoaded', function () {
-      try {
-        var e = localStorage.getItem('_vrLastErr');
-        if (e) {
-          var d = document.getElementById('crash-log');
-          if (d) { d.textContent = e; d.style.display = 'block'; }
-          localStorage.removeItem('_vrLastErr');
-        }
-      } catch (_) {}
-    });
-
-    // Catch all JS errors and persist them so they survive a session crash.
-    window.onerror = function (msg, src, line) {
-      var short = msg + ' — ' + (src || '').split('/').pop() + ':' + line;
-      try { localStorage.setItem('_vrLastErr', short + ' @' + new Date().toISOString()); } catch (_) {}
-      return false;
-    };
-
-    // Catch all unhandled Promise rejections — these kill the Quest WebXR session.
+    // Suppress unhandled rejections — these kill Quest WebXR sessions
     window.addEventListener('unhandledrejection', function (e) {
       e.preventDefault();
-      var reason = e.reason && (e.reason.message || e.reason.stack || String(e.reason));
-      try { localStorage.setItem('_vrLastErr', 'REJECT: ' + reason + ' @' + new Date().toISOString()); } catch (_) {}
       console.warn('[safety] rejection suppressed:', e.reason);
     });
+    window.onerror = function (msg, src, line) {
+      console.warn('[error]', msg, src + ':' + line);
+      return false;
+    };
   </script>
 
   <script>
-    // Torch flicker — randomly varies point-light intensity each frame
+    // ── Torch flicker — random light intensity variation ──────────────────
     AFRAME.registerComponent('torch-flicker', {
       schema: { base: {default: 0.9}, range: {default: 0.35}, speed: {default: 8} },
       init: function () { this._t = 0; this._target = 1; this._cur = 1; },
@@ -88,428 +43,195 @@
         this.el.setAttribute('light', 'intensity', Math.max(0, this._cur));
       }
     });
-  </script>
 
-  <script>
-    // ── RADIAL MENU ITEMS — left trigger hold to open wheel, stick to pick ──
-    // id: used for naming spawned copies (gatehouse-1, gatehouse-2, …)
-    // src: <a-asset-item> id in the scene
-    // scale: same scale used by the staged entity
-    window._radialMenuItems = [
-      { id: 'gatehouse',    name: 'GATEHOUSE',  src: '#gatehouse-glb',        scale: 0.232, desc: 'Medieval stone gateway arch.\nGood as an entrance or ruin piece.' },
-      { id: 'blackfriar',   name: 'BLACKFRIAR', src: '#blackfriar-glb',       scale: 0.694, desc: 'Ornate Victorian pub frontage.\nDecorative terracotta facade.' },
-      { id: 'princelet',    name: 'PRINCELET',  src: '#princelet-glb',        scale: 1.404, desc: 'Georgian townhouse, 3 storeys.\nBrick terrace with sash windows.' },
-      { id: 'factory',      name: 'FACTORY',    src: '#factory-glb',          scale: 0.771, desc: 'Industrial brick mill.\nTall chimney stack. East End style.' },
-      { id: 'derelict-fac', name: 'DERELICT',   src: '#derelict-factory-glb', scale: 1.0,   desc: 'Bomb-damaged factory shell.\nCollapsed roof — place near rubble.' },
-      { id: 'vic-pack',     name: 'VIC.PACK',   src: '#victorian-pack-glb',   scale: 1.0,   desc: 'Victorian street dressing pack.\nLamp, pillar box, cobblestones.' },
-      { id: 'brick-wall',   name: 'WALL',       src: '#brick-wall-glb',       scale: 1.0,   desc: 'Brick boundary wall section.\nStack multiples to build longer runs.' },
-      { id: 'rubble',       name: 'RUBBLE',     src: '#rubble-glb',           scale: 1.0,   desc: 'LiDAR-scanned rubble pile.\nDrop at bomb sites or blocked ends.' },
-      { id: 'old-lamp',     name: 'LAMP',       src: '#old-lamp-glb',         scale: 1.0,   desc: 'Cast iron gas lamp post.\nPlace along streets or alley edges.' },
-      { id: 'antique-shop', name: 'ANTIQUE',    src: '#antique-shop-glb',     scale: 1.0,   desc: 'Victorian antique shop front.\nBay window and painted signage.' },
-      { id: 'vic-fence',    name: 'FENCE',      src: '#victorian-fence-glb',  scale: 1.0,   desc: 'Ornate Victorian iron fence.\nUse along garden or road edges.' },
-      { id: 'vic-street',   name: 'STREET',     src: '#victorian-street-glb', scale: 1.0,   desc: 'Victorian street section.\nCobbles and kerb. Tile the ground.' },
-      { id: 'arch',         name: 'ARCH',       src: '#gunnersbury-arch-glb', scale: 1.0,   desc: 'Stone arch, Gunnersbury style.\nGrand entrances or collapsed ruins.' }
-    ];
-
-    // Shared day/night toggle — called by both the world button and left trigger
-    window._nightMode = false;
-    window.toggleNight = function () {
-      try {
-        window._nightMode = !window._nightMode;
-        var sky        = document.querySelector('#sky');
-        var btn        = document.querySelector('#night-btn');
-        var ambient    = document.querySelector('#ambient-light');
-        var hemisphere = document.querySelector('#hemisphere-light');
-        var sunLight   = document.querySelector('#sun-light');
-        var bounce     = document.querySelector('#bounce-fill');
-        var moonLight  = document.querySelector('#moon-light');
-        var scene      = document.querySelector('a-scene');
-        if (window._nightMode) {
-          if (sky) { sky.setAttribute('src', '#night-sky-img'); sky.setAttribute('color', '#ffffff'); }
-          if (scene) scene.setAttribute('fog', 'type: linear; color: #010306; near: 4; far: 16');
-          if (ambient)    ambient.setAttribute('light',    'intensity: 0.02');
-          if (hemisphere) hemisphere.setAttribute('light', 'intensity: 0');
-          if (sunLight)   sunLight.setAttribute('light',   'intensity: 0');
-          if (bounce)     bounce.setAttribute('light',     'intensity: 0.12');
-          if (moonLight)  moonLight.setAttribute('light',  'intensity: 0.04');
-          if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
-        } else {
-          if (sky) { sky.removeAttribute('src'); sky.setAttribute('color', '#87ceeb'); }
-          if (scene) scene.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
-          if (ambient)    ambient.setAttribute('light',    'intensity: 1.2');
-          if (hemisphere) hemisphere.setAttribute('light', 'color: #87ceeb; groundColor: #8B7355; intensity: 1.0');
-          if (sunLight)   sunLight.setAttribute('light',   'intensity: 1.8');
-          if (bounce)     bounce.setAttribute('light',     'intensity: 0');
-          if (moonLight)  moonLight.setAttribute('light',  'intensity: 0');
-          if (btn) btn.setAttribute('material', 'color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat');
+    // ── Night-aware — darkens GLB materials in night mode ─────────────────
+    window._nightAware = [];
+    AFRAME.registerComponent('night-aware', {
+      schema: { brightness: {default: 0.13}, blueBoost: {default: 1.25} },
+      init: function () {
+        var self = this;
+        self._origColors = [];
+        self._ready = false;
+        function cacheColors() {
+          self._origColors = [];
+          self.el.object3D.traverse(function (node) {
+            if (!node.isMesh) return;
+            var mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach(function (mat) {
+              self._origColors.push({
+                mat: mat,
+                r: mat.color.r, g: mat.color.g, b: mat.color.b,
+                er: mat.emissive ? mat.emissive.r : 0,
+                eg: mat.emissive ? mat.emissive.g : 0,
+                eb: mat.emissive ? mat.emissive.b : 0
+              });
+            });
+          });
+          if (self._origColors.length === 0) return;
+          self._ready = true;
+          self.applyNight(true); // always night mode
         }
-        // Apply/remove night tint on all registered buildings
-        (window._nightAware || []).forEach(function (c) {
-          try { c.applyNight(window._nightMode); } catch(e) {}
-        });
-      } catch(e) { console.error('toggleNight error:', e); }
-    };
-
-    // Torch on/off — toggled by right A button when nothing is held
-    window._torchOn = true;
-    window.toggleTorch = function () {
-      try {
-        window._torchOn = !window._torchOn;
-        var torch = document.querySelector('#torch');
-        if (torch) torch.setAttribute('visible', window._torchOn ? 'true' : 'false');
-      } catch(e) { console.error('toggleTorch error:', e); }
-    };
-
-    // Visitor / walk mode toggle — defined here (top-level) so control-panel can call it at any time
-    window.toggleVisitorMode = function () { try {
-      window._visitorMode = !window._visitorMode;
-      var vBtn = document.querySelector('#visitor-btn');
-      var vLbl = document.querySelector('#visitor-sub');
-      if (window._visitorMode) {
-        // VISITOR: laser hidden by vr-placer tick, faster walk speed
-        if (vBtn) vBtn.setAttribute('material', 'color:#003300; emissive:#00ff44; emissiveIntensity:1; shader:flat');
-        if (vLbl) vLbl.setAttribute('value', 'VISITOR');
-      } else {
-        // BUILD: restore laser to dim-idle opacity
-        if (vBtn) vBtn.setAttribute('material', 'color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat');
-        if (vLbl) vLbl.setAttribute('value', 'BUILD');
-        var _laser = document.querySelector('[oculus-touch-controls*="right"] a-box');
-        if (_laser) _laser.setAttribute('material', 'color:#00ffcc; emissive:#00ffcc; emissiveIntensity:1; shader:flat; opacity:0.18; transparent:true');
-      }
-    } catch(e) { console.error('toggleVisitorMode error:', e); } };
-
-    // Wire up buttons (gaze fuse fires 'click')
-    document.addEventListener('DOMContentLoaded', function () {
-      // Set version label on night button post
-      var vLabel = document.querySelector('#version-label');
-      if (vLabel) vLabel.setAttribute('value', PLACER_VERSION);
-
-      // Night toggle
-      var nightBtn = document.querySelector('#night-btn');
-      if (nightBtn) nightBtn.addEventListener('click', window.toggleNight);
-
-      // Visitor button gaze-fuse click
-      var vBtn2 = document.querySelector('#visitor-btn');
-      if (vBtn2) vBtn2.addEventListener('click', window.toggleVisitorMode);
-
-      // Loading counter — initial display only. Updates driven by sequential spawner below.
-      var _lcEl = document.querySelector('#loading-counter');
-      if (_lcEl) _lcEl.setAttribute('value', 'Loading 0 / 13\u2026');
-
-      // Reset map — two-gaze confirmation
-      var resetBtn  = document.querySelector('#reset-btn');
-      var resetLbl  = document.querySelector('#reset-lbl');
-      var _pending  = false;
-      var _cancelT  = null;
-
-      function cancelReset() {
-        _pending = false;
-        clearTimeout(_cancelT);
-        if (resetBtn) resetBtn.setAttribute('material', 'color:#221111; emissive:#aa1111; emissiveIntensity:1; shader:flat');
-        if (resetLbl) resetLbl.setAttribute('text', 'value: RESET MAP');
-      }
-
-      function doReset() {
-        var originals = window._placerOriginals || {};
-        document.querySelectorAll('.placeable').forEach(function (el) {
-          var id   = el.getAttribute('data-name');
-          var orig = originals[id];
-          if (!orig) return;
-          el.object3D.position.set(orig.x, orig.y || 0, orig.z);
-          el.object3D.rotation.y = orig.rotY || 0;
-          el.object3D.scale.setScalar(orig.scale);
-        });
-        try { localStorage.removeItem('blitz-layout'); } catch(e) {}
-        cancelReset();
-      }
-      window._doReset = doReset; // expose for control-panel
-
-      if (resetBtn) {
-        resetBtn.addEventListener('click', function () {
-          if (!_pending) {
-            // First gaze — ask for confirmation
-            _pending = true;
-            resetBtn.setAttribute('material', 'color:#552200; emissive:#ff5500; emissiveIntensity:1; shader:flat');
-            if (resetLbl) resetLbl.setAttribute('text', 'value: ARE YOU SURE?\nlook again to confirm');
-            // Auto-cancel after 6s if user looks away
-            _cancelT = setTimeout(cancelReset, 6000);
+        self.el.addEventListener('model-loaded', cacheColors);
+        setTimeout(function () { if (!self._ready) cacheColors(); }, 500);
+        setTimeout(function () { if (!self._ready) cacheColors(); }, 2000);
+        window._nightAware.push(self);
+      },
+      applyNight: function (on) {
+        if (!this._ready) return;
+        var br = this.data.brightness, bl = this.data.blueBoost;
+        this._origColors.forEach(function (c) {
+          if (on) {
+            c.mat.color.r = c.r * br * 0.85;
+            c.mat.color.g = c.g * br * 0.9;
+            c.mat.color.b = c.b * br * bl;
+            if (c.mat.emissive) {
+              c.mat.emissive.r = c.er * 0.05;
+              c.mat.emissive.g = c.eg * 0.05;
+              c.mat.emissive.b = c.eb * 0.05;
+            }
           } else {
-            // Second gaze — confirmed
-            doReset();
+            c.mat.color.r = c.r; c.mat.color.g = c.g; c.mat.color.b = c.b;
+            if (c.mat.emissive) {
+              c.mat.emissive.r = c.er; c.mat.emissive.g = c.eg; c.mat.emissive.b = c.eb;
+            }
           }
+          c.mat.needsUpdate = true;
         });
+      },
+      remove: function () {
+        var i = window._nightAware.indexOf(this);
+        if (i !== -1) window._nightAware.splice(i, 1);
       }
     });
 
-    function unlockAudio() {
-      var ctx = AFRAME.THREE.AudioContext.getContext();
-      if (ctx && ctx.state === 'suspended') ctx.resume();
-    }
-    ['click','touchstart','touchend'].forEach(function(e) {
-      document.addEventListener(e, unlockAudio);
+    // ── Snap turn — right thumbstick, 45° per click ───────────────────────
+    AFRAME.registerComponent('snap-turn', {
+      init: function () {
+        var rig = this.el;
+        var _cooldown = false;
+        function bind() {
+          var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+          if (!rightCtrl) { setTimeout(bind, 500); return; }
+          rightCtrl.addEventListener('thumbstickmoved', function (e) {
+            if (_cooldown || Math.abs(e.detail.x) < 0.7) return;
+            rig.object3D.rotation.y += THREE.MathUtils.degToRad(e.detail.x > 0 ? -45 : 45);
+            _cooldown = true;
+            setTimeout(function () { _cooldown = false; }, 350);
+          });
+        }
+        bind();
+      }
     });
-    window.addEventListener('load', function() {
-      var scene = document.querySelector('a-scene');
-      if (scene) scene.addEventListener('enter-vr', unlockAudio);
+
+    // ── Torch toggle — right A button ────────────────────────────────────
+    AFRAME.registerComponent('torch-toggle', {
+      init: function () {
+        var _on = true;
+        function bind() {
+          var rightCtrl = document.querySelector('[oculus-touch-controls*="right"]');
+          if (!rightCtrl) { setTimeout(bind, 500); return; }
+          rightCtrl.addEventListener('abuttondown', function () {
+            try {
+              _on = !_on;
+              var torch = document.querySelector('#torch');
+              if (torch) torch.setAttribute('visible', _on ? 'true' : 'false');
+            } catch(e) {}
+          });
+        }
+        bind();
+      }
+    });
+
+    // ── Audio context unlock (Quest requires a user gesture) ─────────────
+    ['click','touchstart','touchend'].forEach(function (ev) {
+      document.addEventListener(ev, function () {
+        var ctx = AFRAME.THREE.AudioContext.getContext();
+        if (ctx && ctx.state === 'suspended') ctx.resume();
+      });
     });
   </script>
 </head>
 <body>
+
 <a-scene
-  draco-loader
-  star-field
-  boundary-collider
-  vr-placer
-  radial-menu
-  control-panel
-  help-panel
-  fog="type: linear; color: #b0c8e8; near: 60; far: 120"
-  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0"
-  shadow="type: basic"
-  background="color: #87ceeb">
+  fog="type: linear; color: #010306; near: 4; far: 16"
+  renderer="colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08"
+  vr-mode-ui="enabled: true"
+  loading-screen="dotsColor: #ffee88; backgroundColor: #000">
 
   <a-assets timeout="90000">
     <img id="night-sky-img" src="night_sky.jpg" crossorigin="anonymous">
-    <a-asset-item id="gatehouse-glb"   src="st_bartholomews_gatehouse.glb"></a-asset-item>
-    <a-asset-item id="princelet-glb"   src="4_princelet_street.glb"></a-asset-item>
-    <a-asset-item id="blackfriar-glb"  src="the_blackfriar_pub.glb"></a-asset-item>
-    <a-asset-item id="factory-glb"          src="victorian_factory.glb"></a-asset-item>
-    <a-asset-item id="derelict-factory-glb" src="low_poly_derelict_factory.glb"></a-asset-item>
-    <a-asset-item id="victorian-pack-glb"   src="modular_victorian_asset_pack.glb"></a-asset-item>
-    <a-asset-item id="brick-wall-glb"          src="low_mixed_dark_bricks_wall.glb"></a-asset-item>
-    <a-asset-item id="rubble-glb"              src="construction_rubble.glb"></a-asset-item>
-    <a-asset-item id="old-lamp-glb"            src="old_street_lamp.glb"></a-asset-item>
-    <a-asset-item id="antique-shop-glb"        src="antique_shop_compressed.glb"></a-asset-item>
-    <a-asset-item id="victorian-fence-glb"     src="victorian_fence_c.glb"></a-asset-item>
-    <a-asset-item id="victorian-street-glb"    src="victorian_street_scene_c.glb"></a-asset-item>
-    <a-asset-item id="gunnersbury-arch-glb"    src="gunnersbury_arch.glb"></a-asset-item>
+    <a-asset-item id="gatehouse-glb"          src="st_bartholomews_gatehouse.glb"></a-asset-item>
+    <a-asset-item id="princelet-glb"          src="4_princelet_street.glb"></a-asset-item>
+    <a-asset-item id="blackfriar-glb"         src="the_blackfriar_pub.glb"></a-asset-item>
+    <a-asset-item id="factory-glb"            src="victorian_factory.glb"></a-asset-item>
+    <a-asset-item id="derelict-factory-glb"   src="low_poly_derelict_factory.glb"></a-asset-item>
+    <a-asset-item id="victorian-pack-glb"     src="modular_victorian_asset_pack.glb"></a-asset-item>
+    <a-asset-item id="brick-wall-glb"         src="low_mixed_dark_bricks_wall.glb"></a-asset-item>
+    <a-asset-item id="rubble-glb"             src="construction_rubble.glb"></a-asset-item>
+    <a-asset-item id="old-lamp-glb"           src="old_street_lamp.glb"></a-asset-item>
+    <a-asset-item id="antique-shop-glb"       src="antique_shop_compressed.glb"></a-asset-item>
+    <a-asset-item id="victorian-fence-glb"    src="victorian_fence_c.glb"></a-asset-item>
+    <a-asset-item id="victorian-street-glb"   src="victorian_street_scene_c.glb"></a-asset-item>
+    <a-asset-item id="gunnersbury-arch-glb"   src="gunnersbury_arch.glb"></a-asset-item>
   </a-assets>
 
-  <!-- ═══ STAGING AREA — spawned sequentially by JS below to avoid GPU OOM ═══ -->
-  <!-- Single line along X axis, Z=-50 (17 m from spawn), 10 m between each building -->
-  <!-- X runs from -60 to +60. Walk sideways to browse, grab and drag into position. -->
-
-  <!-- ═══ LIGHTING — TEMP DAYLIGHT ═══ -->
-  <a-light id="ambient-light"     type="ambient"     color="#ffffff" intensity="1.2"></a-light>
-  <a-light id="hemisphere-light"  type="hemisphere"  color="#87ceeb" groundColor="#8B7355" intensity="1.0"></a-light>
-  <a-light id="sun-light"         type="directional" color="#ffffff" intensity="1.8" position="-5 20 10"></a-light>
+  <!-- ═══ LIGHTING — NIGHT / BLACKOUT ═══ -->
+  <a-light type="ambient"     color="#ffffff" intensity="0.02"></a-light>
+  <a-light type="hemisphere"  color="#87ceeb" groundColor="#8B7355" intensity="0"></a-light>
+  <a-light type="directional" color="#ffffff" intensity="0" position="-5 20 10"></a-light>
+  <!-- Distant fire glow at far end of alley -->
   <a-light type="point" color="#ff7722" intensity="0.7" distance="50" decay="1.4"
-           position="0 3 -50" fire-flicker></a-light>
+           position="0 3 -50"></a-light>
 
   <!-- ═══ GROUND ═══ -->
   <a-plane position="0 0 -45" rotation="-90 0 0" width="120" height="120"
            material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
 
-  <a-sky id="sky" color="#87ceeb"></a-sky>
+  <!-- ═══ SKY ═══ -->
+  <a-sky id="sky" src="#night-sky-img" color="#ffffff"></a-sky>
 
-  <!-- ═══ DAY / NIGHT toggle button — floating at eye height ═══ -->
-  <a-entity position="1.0 1.55 -33.5" visible="false">
-    <a-box class="btn" id="night-btn"
-           width="0.4" height="0.22" depth="0.08" position="0 0 0"
-           material="color:#112233; emissive:#0055cc; emissiveIntensity:1; shader:flat">
-    </a-box>
-    <a-text id="night-label" value="DAY / NIGHT" position="0 0.18 0" align="center"
-            color="#88ccff" width="2.5" material="shader:flat"></a-text>
-    <a-text value="look 1.5 s" position="0 0.03 0.045" align="center"
-            color="#445566" width="1.8" material="shader:flat"></a-text>
-    <a-text id="version-label" value="" position="0 -0.15 0" align="center"
-            color="#334455" width="1.6" material="shader:flat"></a-text>
-  </a-entity>
-
-  <!-- ═══ VISITOR MODE button — floating at eye height ═══ -->
-  <a-entity position="2.6 1.55 -33.5" visible="false">
-    <a-box class="btn" id="visitor-btn"
-           width="0.4" height="0.22" depth="0.08" position="0 0 0"
-           material="color:#112211; emissive:#225500; emissiveIntensity:1; shader:flat">
-    </a-box>
-    <a-text id="visitor-lbl" value="VISITOR MODE" position="0 0.18 0" align="center"
-            color="#aaffaa" width="2.5" material="shader:flat"></a-text>
-    <a-text value="look 1.5 s" position="0 0.03 0.045" align="center"
-            color="#445566" width="1.8" material="shader:flat"></a-text>
-    <a-text id="visitor-sub" value="BUILD" position="0 -0.15 0" align="center"
-            color="#556644" width="1.6" material="shader:flat"></a-text>
-  </a-entity>
-
-  <!-- ═══ RESET MAP button — floating at eye height ═══ -->
-  <a-entity position="1.8 1.55 -33.5" visible="false">
-    <a-box class="btn" id="reset-btn"
-           width="0.4" height="0.22" depth="0.08" position="0 0 0"
-           material="color:#221111; emissive:#aa1111; emissiveIntensity:1; shader:flat">
-    </a-box>
-    <a-text id="reset-lbl" value="RESET MAP" position="0 0.18 0" align="center"
-            color="#ffaaaa" width="2.5" material="shader:flat"></a-text>
-    <a-text value="look 1.5 s" position="0 0.03 0.045" align="center"
-            color="#445566" width="2" material="shader:flat"></a-text>
-  </a-entity>
-
-  <!-- ═══ SPAWN MARKER — shows exactly where the player loads in ═══ -->
-  <!-- Standing ring -->
-  <a-ring position="0 0.005 -33" rotation="-90 0 0"
-          radius-inner="0.28" radius-outer="0.33"
-          material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:1; shader:flat; opacity:0.75; transparent:true">
-  </a-ring>
-  <!-- Left foot — heel body -->
-  <a-box position="-0.11 0.005 -33.06" width="0.08" height="0.008" depth="0.17"
-         rotation="0 -10 0"
-         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
-  </a-box>
-  <!-- Left foot — toe bump -->
-  <a-box position="-0.13 0.005 -32.94" width="0.07" height="0.008" depth="0.07"
-         rotation="0 -10 0"
-         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
-  </a-box>
-  <!-- Right foot — heel body -->
-  <a-box position=" 0.11 0.005 -33.06" width="0.08" height="0.008" depth="0.17"
-         rotation="0 10 0"
-         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
-  </a-box>
-  <!-- Right foot — toe bump -->
-  <a-box position=" 0.13 0.005 -32.94" width="0.07" height="0.008" depth="0.07"
-         rotation="0 10 0"
-         material="color:#00ffaa; emissive:#00ffaa; emissiveIntensity:0.7; shader:flat; opacity:0.65; transparent:true">
-  </a-box>
-  <!-- Facing arrow — lies flat, ▲ points toward the scene (–Z = forward) -->
-  <a-text value="▲" position="0 0.005 -33.55" rotation="-90 0 0"
-          color="#00ffaa" width="0.9" align="center"
-          material="shader:flat; emissive:#00ffaa; emissiveIntensity:1; opacity:0.9; transparent:true">
-  </a-text>
-  <!-- START label — floating at waist height, visible from a distance -->
-  <a-text value="START" position="0 0.9 -33" rotation="0 0 0"
-          color="#00ffaa" width="2.0" align="center"
-          material="shader:flat; emissive:#00ffaa; emissiveIntensity:0.6; opacity:0.55; transparent:true">
-  </a-text>
-
-  <!-- ── Loading counter — shows above spawn while GLBs load, hides when done ── -->
+  <!-- ═══ LOADING COUNTER ═══ -->
   <a-entity position="0 2.3 -34" id="loading-counter-wrapper">
-    <a-text id="loading-counter" value="Loading…" align="center"
-            color="#ffee88" width="4"
+    <a-text id="loading-counter" value="Loading…" align="center" width="4"
             material="shader:flat; emissive:#ffee88; emissiveIntensity:0.5; opacity:0.85; transparent:true">
     </a-text>
   </a-entity>
 
-  <!-- ── Scale reference person — 1.75 m silhouette, grab and place next to buildings ── -->
-  <a-entity class="placeable" data-name="scale-ref" position="1.5 0 -34" visible="false">
-    <!-- body -->
-    <a-box width="0.45" height="0.9" depth="0.25" position="0 0.45 0"
-           material="color:#ccddff; opacity:0.45; transparent:true; shader:flat;
-                     emissive:#8899cc; emissiveIntensity:0.6; side:double"></a-box>
-    <!-- head -->
-    <a-box width="0.25" height="0.28" depth="0.22" position="0 1.175 0"
-           material="color:#ccddff; opacity:0.45; transparent:true; shader:flat;
-                     emissive:#8899cc; emissiveIntensity:0.6; side:double"></a-box>
-    <!-- height label -->
-    <a-text value="1.75 m" position="0 1.9 0" align="center"
-            color="#aabbff" width="2.5"
-            material="shader:flat; emissive:#aabbff; emissiveIntensity:0.7; opacity:0.8; transparent:true">
-    </a-text>
-  </a-entity>
-
-  <!-- ── Controls card — grabbable, starts on the wall to the left of spawn ── -->
-  <!-- Grab with right grip laser like any building. Hold it up to read. -->
-  <!-- Controls card — A5 portrait, grabbable, hanging left of spawn -->
-  <a-entity class="placeable" data-name="controls-card" id="controls-card"
-            position="-1.0 1.2 -34.5" rotation="0 15 0">
-    <a-plane width="0.21" height="0.30"
-             material="color:#f5f0e8; shader:flat; side:double"></a-plane>
-    <!-- single text block, baseline top, tight wrap -->
-    <a-text
-      value="— CONTROLS —
-
-RIGHT HAND
-Grip: laser / select
-+ Trigger: drag building
-R-Stick: spin / scale
-Stick click: cycle tool
-A: floor snap / confirm
-B: CONTROL PANEL
-
-CONTROL PANEL (B)
-All tools in one place
-R-stick: navigate
-A: activate   B: close
-UNDO, REDO, CLONE,
-TILT, HEIGHT + more
-
-LEFT HAND
-Stick: walk
-Trigger hold: spawn
-  Stick: pick + release
-  Stick click: next page
-Grip + Stick: set height
-Stick click: undo
-
-WORLD (look 1.5 s)
-Blue:  day / night
-Green: visitor / build"
-      position="-0.093 0.138 0.002"
-      align="left"
-      baseline="top"
-      width="0.19"
-      wrap-count="22"
-      color="#222222"
-      material="shader:flat">
-    </a-text>
-  </a-entity>
-
-  <!-- ═══ BUILDINGS — spawned via left-trigger radial wheel menu ═══ -->
-  <!-- No staged entities needed. Radial wheel creates fresh copies from assets. -->
-
-  <!-- ═══ PLAYER ═══
-       Spawns at ground zero, looking toward the buildings. -->
+  <!-- ═══ PLAYER ═══ -->
   <a-entity id="rig" position="0 0 -33"
-            movement-controls="fly: false; speed: 0.2; camera: #cam">
+            movement-controls="fly: false; speed: 0.2; camera: #cam"
+            snap-turn>
     <a-entity id="cam" camera look-controls position="0 1.6 0">
-      <!-- Bounce fill: simulates torch light already reflected off nearby walls/floor. Night only. -->
-      <a-entity id="bounce-fill" light="type:point; color:#ff6600; intensity:0; distance:6; decay:1" position="0 -0.4 0"></a-entity>
-      <!-- Moonlight: faint cool directional rim. Night only. -->
-      <a-entity id="moon-light" light="type:directional; color:#8899cc; intensity:0" position="0.3 1 -0.2"></a-entity>
-      <!-- Gaze cursor: look at .btn objects for 1.5s to activate -->
-      <a-cursor fuse="true" fuse-timeout="1500"
-                raycaster="objects: .btn; far: 20; interval: 200"
-                material="color:#ffffff; shader:flat; opacity:0"
-                geometry="primitive: ring; radiusInner: 0; radiusOuter: 0"
-                position="0 0 -1">
-      </a-cursor>
+      <!-- Bounce fill: simulates torch light bounced off nearby walls/floor -->
+      <a-entity light="type:point; color:#ff6600; intensity:0.12; distance:6; decay:1" position="0 -0.4 0"></a-entity>
+      <!-- Moonlight: faint cool rim on upward-facing surfaces -->
+      <a-entity light="type:directional; color:#8899cc; intensity:0.04" position="0.3 1 -0.2"></a-entity>
     </a-entity>
 
-    <a-entity oculus-touch-controls="hand: left; model: false">
-      <a-text value="trigger: spawn" position="0.032 0.018 -0.052" rotation="-50 0 0" color="#ffee44" width="0.16" align="left"></a-text>
-      <a-text value="Y: save"        position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#44ffaa" width="0.16" align="left"></a-text>
-      <a-text value="grip: height"   position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
-      <a-text value="stick: walk"    position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.16" align="left"></a-text>
-    </a-entity>
+    <a-entity oculus-touch-controls="hand: left; model: false"></a-entity>
 
-    <a-entity oculus-touch-controls="hand: right; model: false">
-      <a-text value="grip: grab"      position="0.032 0.008 -0.052" rotation="-50 0 0" color="#ffaa44" width="0.16" align="left"></a-text>
-      <a-text value="A: floor snap"   position="-0.012 0.038 -0.052" rotation="-50 0 0" color="#88ff88" width="0.16" align="left"></a-text>
-      <a-text value="stick↓: tool"    position="0.018 0.008 -0.082" rotation="-20 0 0" color="#ff8888" width="0.16" align="left"></a-text>
-      <a-text value="stick: spin/scale" position="-0.01 0.048 -0.032" rotation="-70 0 0" color="#88aaff" width="0.12" align="left"></a-text>
-      <!-- Carried torch — held in right hand, tilted upright -->
+    <a-entity oculus-touch-controls="hand: right; model: false"
+              torch-toggle>
+      <!-- Carried torch -->
       <a-entity id="torch" position="0 0.05 -0.08" rotation="40 0 0">
-        <!-- Handle -->
         <a-cylinder radius="0.018" height="0.28"
-                    material="color:#3b1f0a; roughness:0.9; metalness:0"
-                    position="0 0 0"></a-cylinder>
-        <!-- Wrap bands -->
+                    material="color:#3b1f0a; roughness:0.9; metalness:0"></a-cylinder>
         <a-cylinder radius="0.022" height="0.015"
                     material="color:#1a0d00; roughness:0.8; metalness:0.1"
                     position="0 0.08 0"></a-cylinder>
         <a-cylinder radius="0.022" height="0.015"
                     material="color:#1a0d00; roughness:0.8; metalness:0.1"
                     position="0 -0.05 0"></a-cylinder>
-        <!-- Torch head (tar-wrapped top) -->
         <a-cylinder radius="0.028" height="0.07"
                     material="color:#1a1005; roughness:1; metalness:0"
                     position="0 0.175 0"></a-cylinder>
-        <!-- Flame glow sphere -->
         <a-sphere radius="0.04"
                   material="color:#ff6600; emissive:#ff4400; emissiveIntensity:1; shader:flat; transparent:true; opacity:0.9"
                   position="0 0.225 0"></a-sphere>
-        <!-- Flame inner bright core -->
         <a-sphere radius="0.022"
                   material="color:#ffdd44; emissive:#ffcc00; emissiveIntensity:1; shader:flat; transparent:true; opacity:0.85"
                   position="0 0.232 0"></a-sphere>
-        <!-- Flickering point light -->
         <a-entity light="type:point; color:#ff8822; intensity:0.9; distance:9; decay:1"
                   torch-flicker="base:0.9; range:0.35; speed:9"
                   position="0 0.24 0"></a-entity>
@@ -519,71 +241,59 @@ Green: visitor / build"
 
 </a-scene>
 
-<div id="crash-log"></div>
-<div id="version-overlay">v1.7</div>
-
 <script>
-  // ── SEQUENTIAL SPAWN — one entity at a time, each waiting for model-loaded ──
-  // Staggers GPU texture uploads to avoid OOM crash when all 13 load at once.
+  // ── Sequential staged spawn — staggered to avoid GPU OOM on Quest ────────
   var _STAGED = [
-    { name:'gatehouse-0',    src:'#gatehouse-glb',        scale:0.232, x:-60, z:-50, nightBr:0.06 },
-    { name:'blackfriar-0',   src:'#blackfriar-glb',       scale:0.694, x:-50, z:-50 },
-    { name:'princelet-0',    src:'#princelet-glb',        scale:1.404, x:-40, z:-50 },
-    { name:'factory-0',      src:'#factory-glb',          scale:0.771, x:-30, z:-50 },
-    { name:'derelict-fac-0', src:'#derelict-factory-glb', scale:1.0,   x:-20, z:-50 },
-    { name:'vic-pack-0',     src:'#victorian-pack-glb',   scale:1.0,   x:-10, z:-50 },
-    { name:'brick-wall-0',   src:'#brick-wall-glb',       scale:1.0,   x:0,   z:-50 },
-    { name:'rubble-0',       src:'#rubble-glb',           scale:1.0,   x:10,  z:-50 },
-    { name:'old-lamp-0',     src:'#old-lamp-glb',         scale:1.0,   x:20,  z:-50 },
-    { name:'antique-shop-0', src:'#antique-shop-glb',     scale:1.0,   x:30,  z:-50 },
-    { name:'vic-fence-0',    src:'#victorian-fence-glb',  scale:1.0,   x:40,  z:-50 },
-    { name:'vic-street-0',   src:'#victorian-street-glb', scale:1.0,   x:50,  z:-50 },
-    { name:'arch-0',         src:'#gunnersbury-arch-glb', scale:1.0,   x:60,  z:-50 }
+    { name:'gatehouse-0',    src:'#gatehouse-glb',        scale:0.232, x:-60, nightBr:0.06 },
+    { name:'blackfriar-0',   src:'#blackfriar-glb',       scale:0.694, x:-50 },
+    { name:'princelet-0',    src:'#princelet-glb',        scale:1.404, x:-40 },
+    { name:'factory-0',      src:'#factory-glb',          scale:0.771, x:-30 },
+    { name:'derelict-fac-0', src:'#derelict-factory-glb', scale:1.0,   x:-20 },
+    { name:'vic-pack-0',     src:'#victorian-pack-glb',   scale:1.0,   x:-10 },
+    { name:'brick-wall-0',   src:'#brick-wall-glb',       scale:1.0,   x:0   },
+    { name:'rubble-0',       src:'#rubble-glb',           scale:1.0,   x:10  },
+    { name:'old-lamp-0',     src:'#old-lamp-glb',         scale:1.0,   x:20  },
+    { name:'antique-shop-0', src:'#antique-shop-glb',     scale:1.0,   x:30  },
+    { name:'vic-fence-0',    src:'#victorian-fence-glb',  scale:1.0,   x:40  },
+    { name:'vic-street-0',   src:'#victorian-street-glb', scale:1.0,   x:50  },
+    { name:'arch-0',         src:'#gunnersbury-arch-glb', scale:1.0,   x:60  }
   ];
   var _stageDone = 0;
-  var _stageTotal = _STAGED.length;
 
   function _spawnNext(i) {
     if (i >= _STAGED.length) return;
     var d = _STAGED[i];
     var e = document.createElement('a-entity');
-    e.setAttribute('class', 'placeable');
-    e.setAttribute('night-aware', d.nightBr ? 'brightness:' + d.nightBr : '');
     e.setAttribute('data-name', d.name);
     e.setAttribute('gltf-model', d.src);
+    e.setAttribute('night-aware', d.nightBr ? 'brightness:' + d.nightBr : '');
+    e.setAttribute('position', d.x + ' 0 -50');
     var s = d.scale;
-    e.setAttribute('position', d.x + ' 0 ' + (d.z || -50));
     e.setAttribute('scale', s + ' ' + s + ' ' + s);
     e.addEventListener('model-loaded', function () {
-      // Register with vr-placer so the laser can hover/grab this building
-      if (window._vrPlacerRegisterLoaded) window._vrPlacerRegisterLoaded(e);
       _stageDone++;
       var lc = document.querySelector('#loading-counter');
       if (lc) {
-        if (_stageDone >= _stageTotal) {
-          lc.setAttribute('value', 'All loaded \u2713');
+        if (_stageDone >= _STAGED.length) {
+          lc.setAttribute('value', 'Ready \u2713');
           setTimeout(function () {
             var w = document.querySelector('#loading-counter-wrapper');
             if (w) w.setAttribute('visible', 'false');
-          }, 2500);
+          }, 2000);
         } else {
-          lc.setAttribute('value', 'Loading ' + _stageDone + ' / ' + _stageTotal + '\u2026');
+          lc.setAttribute('value', 'Loading ' + _stageDone + ' / ' + _STAGED.length + '\u2026');
         }
       }
       setTimeout(function () { _spawnNext(i + 1); }, 200);
     });
     e.addEventListener('model-error', function () {
       _stageDone++;
-      var lc = document.querySelector('#loading-counter');
-      if (lc) lc.setAttribute('value', 'Loading ' + _stageDone + ' / ' + _stageTotal + '\u2026');
       setTimeout(function () { _spawnNext(i + 1); }, 100);
     });
     document.querySelector('a-scene').appendChild(e);
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    _spawnNext(0);
-  });
+  document.addEventListener('DOMContentLoaded', function () { _spawnNext(0); });
 </script>
 </body>
 </html>
