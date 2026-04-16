@@ -124,7 +124,7 @@
       var bounce     = document.querySelector('#bounce-fill');
       var moonLight  = document.querySelector('#moon-light');
       if (window._nightMode) {
-        if (sky) { sky.setAttribute('src', '#night-sky-img'); sky.removeAttribute('color'); }
+        if (sky) { sky.setAttribute('src', '#night-sky-img'); sky.setAttribute('color', '#ffffff'); }
         scene.setAttribute('fog', 'type: linear; color: #010306; near: 4; far: 16');
         scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08');
         if (ambient)    ambient.setAttribute('light',    'intensity: 0.02');
@@ -134,7 +134,7 @@
         if (moonLight)  moonLight.setAttribute('light',  'intensity: 0.04');
         if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
       } else {
-        if (sky) { sky.removeAttribute('src'); sky.setAttribute('color', '#87ceeb'); }
+        if (sky) { sky.setAttribute('src', ''); sky.setAttribute('color', '#87ceeb'); }
         scene.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
         scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
         if (ambient)    ambient.setAttribute('light',    'intensity: 1.2');
