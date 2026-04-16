@@ -116,13 +116,13 @@
     window.toggleNight = function () {
       window._nightMode = !window._nightMode;
       var scene  = document.querySelector('a-scene');
-      var sky    = document.querySelector('a-sky');
+      var sky    = document.querySelector('#sky');
       var btn    = document.querySelector('#night-btn');
       var ambient    = document.querySelector('#ambient-light');
       var hemisphere = document.querySelector('#hemisphere-light');
       var sunLight   = document.querySelector('#sun-light');
       if (window._nightMode) {
-        if (sky)       sky.setAttribute('color', '#010306');
+        if (sky) { sky.setAttribute('src', '#night-sky-img'); sky.removeAttribute('color'); }
         scene.setAttribute('fog', 'type: linear; color: #010306; near: 4; far: 16');
         scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 0.08');
         if (ambient)    ambient.setAttribute('light',    'intensity: 0.02');
@@ -130,7 +130,7 @@
         if (sunLight)   sunLight.setAttribute('light',   'intensity: 0');
         if (btn) btn.setAttribute('material', 'color:#330800; emissive:#cc3300; emissiveIntensity:1; shader:flat');
       } else {
-        if (sky)       sky.setAttribute('color', '#87ceeb');
+        if (sky) { sky.removeAttribute('src'); sky.setAttribute('color', '#87ceeb'); }
         scene.setAttribute('fog', 'type: linear; color: #b0c8e8; near: 60; far: 120');
         scene.setAttribute('renderer', 'colorManagement: true; antialias: false; physicallyCorrectLights: true; exposure: 1.0');
         if (ambient)    ambient.setAttribute('light',    'intensity: 1.2');
@@ -251,6 +251,7 @@
   background="color: #87ceeb">
 
   <a-assets timeout="90000">
+    <img id="night-sky-img" src="night_sky.jpg" crossorigin="anonymous">
     <a-asset-item id="gatehouse-glb"   src="st_bartholomews_gatehouse.glb"></a-asset-item>
     <a-asset-item id="princelet-glb"   src="4_princelet_street.glb"></a-asset-item>
     <a-asset-item id="blackfriar-glb"  src="the_blackfriar_pub.glb"></a-asset-item>
@@ -281,7 +282,7 @@
   <a-plane position="0 0 -45" rotation="-90 0 0" width="120" height="120"
            material="color:#1a1810; roughness:0.95; metalness:0"></a-plane>
 
-  <a-sky color="#87ceeb"></a-sky>
+  <a-sky id="sky" color="#87ceeb"></a-sky>
 
   <!-- ═══ DAY / NIGHT toggle button — floating at eye height ═══ -->
   <a-entity position="1.0 1.55 -33.5" visible="false">
