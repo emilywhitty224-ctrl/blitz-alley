@@ -18,6 +18,9 @@
             mats.forEach(function (mat) {
               // Dark cool-blue tint — multiplies the baked texture colour
               mat.color.setRGB(0.06, 0.07, 0.10);
+              // Kill any self-illumination (emissive maps make objects glow regardless of lights)
+              if (mat.emissive) mat.emissive.setRGB(0, 0, 0);
+              mat.emissiveIntensity = 0;
               mat.needsUpdate = true;
             });
           });
